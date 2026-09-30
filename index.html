@@ -1,0 +1,1236 @@
+<title>Comparador de Catálogo</title>
+<style>
+/*
+  Layout concept: a vertical workbench — three stacked stations (Catálogo →
+  Fotos → Tabla) the way a warehouse worker would move down a packing bench,
+  each station showing its own state instead of hiding behind tabs.
+*/
+:root{
+  --bg:#f6f3ee;
+  --surface:#ffffff;
+  --surface-2:#efe9df;
+  --fg:#211d17;
+  --muted:#6f6655;
+  --border:#ddd4c4;
+  --accent:#a8632f;
+  --accent-fg:#fffaf3;
+  --good:#3d7a4f;
+  --good-bg:#e4f0e6;
+  --warn:#9c6b1f;
+  --warn-bg:#f5ead2;
+  --bad:#a53f3f;
+  --bad-bg:#f6e4e4;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#1a1712;
+    --surface:#242019;
+    --surface-2:#2d2820;
+    --fg:#efe8dc;
+    --muted:#a89d89;
+    --border:#3c352a;
+    --accent:#e0904f;
+    --accent-fg:#221708;
+    --good:#7fc492;
+    --good-bg:#20301f;
+    --warn:#e0b45c;
+    --warn-bg:#3a2f16;
+    --bad:#e08585;
+    --bad-bg:#3a1f1f;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#1a1712;
+  --surface:#242019;
+  --surface-2:#2d2820;
+  --fg:#efe8dc;
+  --muted:#a89d89;
+  --border:#3c352a;
+  --accent:#e0904f;
+  --accent-fg:#221708;
+  --good:#7fc492;
+  --good-bg:#20301f;
+  --warn:#e0b45c;
+  --warn-bg:#3a2f16;
+  --bad:#e08585;
+  --bad-bg:#3a1f1f;
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg)}
+body,input,textarea,select,button{font-family:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,sans-serif}
+.mono,input[data-mono],.tabular{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+
+.wrap{max-width:920px;margin:0 auto;padding-inline:16px;padding-block:28px 60px}
+
+header.top{margin-bottom:28px}
+header.top h1{font-size:1.5rem;margin:0 0 6px;letter-spacing:-0.01em}
+header.top p{margin:0;color:var(--muted);font-size:.92rem;max-width:60ch;line-height:1.5}
+
+.stations{display:flex;flex-direction:column;gap:20px}
+
+.station{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:20px;
+}
+.station-head{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.station-num{
+  width:26px;height:26px;border-radius:50%;
+  background:var(--accent);color:var(--accent-fg);
+  display:flex;align-items:center;justify-content:center;
+  font-size:.8rem;font-weight:600;flex:none;
+}
+.station-head h2{font-size:1.05rem;margin:0}
+.station-head .sub{color:var(--muted);font-size:.82rem;margin-top:2px}
+.station-head-text{min-width:0}
+
+.dropzone{
+  border:1.5px dashed var(--border);
+  border-radius:10px;
+  padding:22px 16px;
+  text-align:center;
+  color:var(--muted);
+  font-size:.88rem;
+  cursor:pointer;
+  transition:border-color .15s, background .15s;
+}
+.dropzone:hover, .dropzone.drag{border-color:var(--accent);background:var(--surface-2)}
+.dropzone strong{color:var(--fg)}
+.dropzone input{display:none}
+
+.progress-row{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:.82rem;color:var(--muted)}
+.progress-bar{flex:1;height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden}
+.progress-bar > div{height:100%;background:var(--accent);width:0%;transition:width .2s}
+
+.pill{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:2px 9px;border-radius:99px;font-size:.72rem;font-weight:600;
+  letter-spacing:.02em;
+}
+.pill.good{background:var(--good-bg);color:var(--good)}
+.pill.warn{background:var(--warn-bg);color:var(--warn)}
+.pill.bad{background:var(--bad-bg);color:var(--bad)}
+.pill.neutral{background:var(--surface-2);color:var(--muted)}
+
+.catalog-summary{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:14px}
+.catalog-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));
+  gap:8px;margin-top:14px;max-height:260px;overflow-y:auto;padding-right:2px;
+}
+.catalog-grid figure{margin:0;text-align:center}
+.catalog-grid img{width:100%;aspect-ratio:1;object-fit:contain;background:var(--surface-2);border-radius:8px;border:1px solid var(--border)}
+.catalog-grid figcaption{font-size:.62rem;color:var(--muted);margin-top:3px;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.btn{
+  border:1px solid var(--border);background:var(--surface-2);color:var(--fg);
+  border-radius:8px;padding:8px 14px;font-size:.85rem;cursor:pointer;font-weight:500;
+}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.btn.primary:hover{filter:brightness(1.05)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.small{padding:5px 10px;font-size:.76rem}
+
+textarea.linkbox{
+  width:100%;min-height:60px;resize:vertical;border:1px solid var(--border);
+  border-radius:8px;padding:9px 11px;background:var(--surface);color:var(--fg);
+  font-size:.82rem;
+}
+.field-label{font-size:.76rem;color:var(--muted);font-weight:600;letter-spacing:.02em;text-transform:uppercase;display:block;margin-bottom:6px}
+
+.review-list{display:flex;flex-direction:column;gap:14px;margin-top:14px}
+.review-card{
+  border:1px solid var(--border);border-radius:12px;padding:14px;
+  display:grid;grid-template-columns:80px 1fr;gap:14px;
+}
+@media (max-width:520px){ .review-card{grid-template-columns:1fr} }
+.review-card .photo img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;border:1px solid var(--border)}
+.review-card .match-row{display:flex;gap:10px;align-items:flex-start;margin-bottom:10px}
+.review-card .match-row img{width:56px;height:56px;object-fit:contain;background:var(--surface-2);border-radius:6px;border:1px solid var(--border);flex:none}
+.review-card .match-info{min-width:0;font-size:.82rem}
+.review-card .match-info .name{font-weight:600}
+.review-card .match-info .meta{color:var(--muted);font-size:.76rem;margin-top:2px}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media (max-width:520px){ .grid2{grid-template-columns:1fr} }
+.inp{width:100%;border:1px solid var(--border);border-radius:7px;padding:6px 9px;background:var(--surface);color:var(--fg);font-size:.82rem}
+.inp:focus{outline:2px solid var(--accent);outline-offset:1px}
+label.mini{font-size:.7rem;color:var(--muted);display:block;margin-bottom:3px}
+
+select.inp{appearance:auto}
+
+.pick-alt{margin-top:8px}
+.pick-alt summary{font-size:.76rem;color:var(--accent);cursor:pointer}
+.alt-grid{display:flex;gap:8px;overflow-x:auto;padding:8px 0}
+.alt-grid button{
+  border:1px solid var(--border);background:var(--surface);border-radius:8px;
+  padding:6px;cursor:pointer;flex:none;width:76px;text-align:center;
+}
+.alt-grid button.chosen{border-color:var(--accent);background:var(--surface-2)}
+.alt-grid img{width:100%;aspect-ratio:1;object-fit:contain;border-radius:5px}
+.alt-grid .n{font-size:.6rem;color:var(--muted);margin-top:3px;line-height:1.15;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.actions-row{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
+
+.table-toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+.table-toolbar select,.table-toolbar input{max-width:180px}
+
+table.products{width:100%;border-collapse:collapse;font-size:.82rem}
+table.products th{
+  text-align:left;font-size:.7rem;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.03em;font-weight:600;padding:6px 8px;border-bottom:1px solid var(--border);
+}
+table.products td{padding:6px 8px;border-bottom:1px solid var(--border);vertical-align:top}
+table.products img{width:40px;height:40px;object-fit:cover;border-radius:6px;border:1px solid var(--border)}
+.table-scroll{overflow-x:auto;border-radius:10px;border:1px solid var(--border)}
+.table-scroll table{border:none}
+.table-scroll th:first-child,.table-scroll td:first-child{padding-left:12px}
+
+.empty-state{
+  border:1px dashed var(--border);border-radius:10px;padding:22px;
+  text-align:center;color:var(--muted);font-size:.85rem;
+}
+.empty-state strong{color:var(--fg);display:block;margin-bottom:4px;font-size:.92rem}
+
+.note{font-size:.76rem;color:var(--muted);margin-top:10px;line-height:1.5}
+.note code{background:var(--surface-2);padding:1px 5px;border-radius:4px;font-size:.72rem}
+
+.toast{
+  position:fixed;left:50%;bottom:20px;transform:translateX(-50%);
+  background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:8px;
+  font-size:.82rem;opacity:0;pointer-events:none;transition:opacity .2s, transform .2s;
+  z-index:50;max-width:90vw;text-align:center;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(-4px)}
+
+.spinner{
+  width:14px;height:14px;border-radius:50%;border:2px solid var(--border);
+  border-top-color:var(--accent);animation:spin .7s linear infinite;flex:none;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.rowbtns{display:flex;gap:4px}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <h1>Comparador de Catálogo</h1>
+    <p>Sube el catálogo en PDF de tus productos, luego las fotos que quieras identificar. La herramienta sugiere a qué modelo corresponde cada foto — tú confirmas o corriges — y arma una tabla con colores, medidas y descripción, lista para exportar o compartir.</p>
+  </header>
+
+  <div class="stations">
+
+    <!-- STATION 1: CATALOG -->
+    <section class="station" id="station-catalog">
+      <div class="station-head">
+        <div class="station-num">1</div>
+        <div class="station-head-text">
+          <h2>Catálogo en PDF</h2>
+          <div class="sub">Se procesa aquí mismo, en tu navegador — el archivo no se envía a ningún servidor.</div>
+        </div>
+      </div>
+
+      <label class="dropzone" id="pdf-dropzone">
+        <input type="file" id="pdf-input" accept="application/pdf" />
+        <span id="pdf-dz-text"><strong>Arrastra el PDF del catálogo aquí</strong><br>o haz clic para elegir el archivo</span>
+      </label>
+
+      <div class="progress-row" id="pdf-progress-row" hidden>
+        <div class="spinner"></div>
+        <span id="pdf-progress-text">Leyendo página 0 de 0…</span>
+        <div class="progress-bar"><div id="pdf-progress-bar"></div></div>
+      </div>
+
+      <div id="catalog-summary-wrap" hidden>
+        <div class="catalog-summary">
+          <span class="pill good" id="catalog-count-pill">0 productos detectados</span>
+          <span class="pill neutral" id="catalog-img-pill">0 imágenes</span>
+          <button class="btn small" id="catalog-toggle-grid">Ver productos detectados</button>
+          <button class="btn small" id="catalog-reload">Cargar otro PDF</button>
+        </div>
+        <div class="catalog-grid" id="catalog-grid" hidden></div>
+      </div>
+
+      <p class="note" id="pdf-note">El emparejamiento de nombre + imagen + medidas por página es automático pero aproximado — revisa la sección 2 antes de guardar cada producto.</p>
+    </section>
+
+    <!-- STATION 2: PHOTOS -->
+    <section class="station" id="station-photos">
+      <div class="station-head">
+        <div class="station-num">2</div>
+        <div class="station-head-text">
+          <h2>Fotos a identificar</h2>
+          <div class="sub">Sube un lote de fotos, o pega enlaces de Google Drive (uno por línea, cada archivo compartido como "cualquiera con el enlace").</div>
+        </div>
+      </div>
+
+      <label class="dropzone" id="photo-dropzone">
+        <input type="file" id="photo-input" accept="image/*" multiple />
+        <span><strong>Arrastra tus fotos aquí</strong><br>o haz clic para elegir varias a la vez</span>
+      </label>
+
+      <div style="margin-top:12px">
+        <span class="field-label">Enlaces de Google Drive (opcional)</span>
+        <textarea class="linkbox" id="drive-links" placeholder="https://drive.google.com/file/d/XXXXXXXX/view&#10;https://drive.google.com/file/d/YYYYYYYY/view"></textarea>
+        <div class="actions-row" style="justify-content:flex-start;margin-top:8px">
+          <button class="btn" id="drive-add-btn">Agregar enlaces</button>
+        </div>
+      </div>
+
+      <div class="progress-row" id="match-progress-row" hidden>
+        <div class="spinner"></div>
+        <span id="match-progress-text">Comparando fotos…</span>
+      </div>
+
+      <div class="review-list" id="review-list"></div>
+    </section>
+
+    <!-- STATION 3: TABLE -->
+    <section class="station" id="station-table">
+      <div class="station-head">
+        <div class="station-num">3</div>
+        <div class="station-head-text">
+          <h2>Tabla de productos</h2>
+          <div class="sub">Se guarda aquí mismo — cualquiera con el enlace de esta página puede verla; con permiso de edición, también editarla.</div>
+        </div>
+      </div>
+
+      <div class="table-toolbar">
+        <select class="inp" id="filter-seccion">
+          <option value="">Todas las secciones</option>
+          <option>Comedor</option>
+          <option>Sala</option>
+          <option>Escritorio</option>
+          <option>Otra</option>
+        </select>
+        <input class="inp" id="filter-text" placeholder="Buscar por modelo…" />
+        <span style="flex:1"></span>
+        <button class="btn primary" id="export-csv-btn">Descargar CSV</button>
+      </div>
+
+      <div id="table-empty" class="empty-state">
+        <strong>Todavía no hay productos guardados</strong>
+        Confirma una foto en la sección 2 para que aparezca aquí, con su modelo, colores y medidas.
+      </div>
+
+      <div class="table-scroll" id="table-scroll" hidden>
+        <table class="products">
+          <thead>
+            <tr>
+              <th>Foto</th>
+              <th>Sección</th>
+              <th>Modelo</th>
+              <th>Colores disponibles</th>
+              <th>Medidas</th>
+              <th>Descripción</th>
+              <th>Pág.</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="pdf.min.js"></script>
+<script>
+(function(){
+"use strict";
+
+/* ---------- constants mirroring the catalog's own vocabulary ---------- */
+const CATEGORY_TOKENS = [
+  "SILLON DE MASAJE","MESA ALTA","BUFFET","MESA","SILLA","SILLON",
+  "SOFA CAMA","TABURETE","BANCA"
+];
+const SPEC_LABELS = new Set([
+  "CUBIERTA","BASE","COLOR","MEDIDAS","PEDESTAL","TAPIZ","PATAS",
+  "COLOR PATAS","COLOR BASE","LAZY SUSAN","MATERIAL"
+]);
+const SECCION_MAP = [
+  [["MESA","BUFFET","SILLA"], "Comedor"],
+  [["SILLON","SOFA","TABURETE","BANCA"], "Sala"],
+  [["ESCRITORIO","LIBRERO"], "Escritorio"],
+];
+
+function stripAccents(s){
+  return s.normalize("NFD").replace(/\p{Mn}/gu,"");
+}
+function norm(s){ return stripAccents((s||"").trim().toUpperCase()); }
+
+function guessSeccion(categoria){
+  const c = norm(categoria);
+  for (const [keys, seccion] of SECCION_MAP){
+    if (keys.some(k => c.includes(k))) return seccion;
+  }
+  return "Otra";
+}
+
+function matchCategoryToken(text){
+  const n = norm(text);
+  for (const tok of CATEGORY_TOKENS){
+    if (n === tok) return {token: tok, rest: ""};
+    if (n.startsWith(tok + " ")) return {token: tok, rest: text.trim().slice(tok.length).trim()};
+  }
+  return null;
+}
+
+/* ---------- toast ---------- */
+let toastTimer = null;
+function toast(msg){
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> el.classList.remove("show"), 3200);
+}
+
+/* ---------- perceptual hash (dHash, 8x8 = 64 bits) ---------- */
+function computeDHashFromCanvasSource(source){
+  try{
+    const w = 9, h = 8;
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const ctx = c.getContext("2d", {willReadFrequently:true});
+    ctx.drawImage(source, 0, 0, w, h);
+    const data = ctx.getImageData(0,0,w,h).data;
+    const gray = new Float32Array(w*h);
+    for (let i=0;i<w*h;i++){
+      const r=data[i*4], g=data[i*4+1], b=data[i*4+2];
+      gray[i] = 0.299*r + 0.587*g + 0.114*b;
+    }
+    const bits = new Uint8Array(64);
+    let k=0;
+    for (let y=0;y<h;y++){
+      for (let x=0;x<w-1;x++){
+        bits[k++] = gray[y*w+x] < gray[y*w+x+1] ? 1 : 0;
+      }
+    }
+    return bits;
+  }catch(e){
+    return null; // tainted canvas (e.g. cross-origin Drive image without CORS)
+  }
+}
+function hamming(a,b){
+  if (!a || !b) return Infinity;
+  let d=0;
+  for (let i=0;i<a.length;i++) if (a[i]!==b[i]) d++;
+  return d;
+}
+function similarityPct(dist, bits){ return Math.max(0, Math.round((1 - dist/bits)*100)); }
+
+function loadImageFromSrc(src, crossOrigin){
+  return new Promise((resolve,reject)=>{
+    const img = new Image();
+    if (crossOrigin) img.crossOrigin = "anonymous";
+    img.onload = ()=>resolve(img);
+    img.onerror = (e)=>reject(e);
+    img.src = src;
+  });
+}
+function fileToDataUrl(file){
+  return new Promise((resolve,reject)=>{
+    const r = new FileReader();
+    r.onload = ()=>resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+function canvasFromImage(img, maxDim){
+  let w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+  if (Math.max(w,h) > maxDim){
+    const s = maxDim/Math.max(w,h);
+    w = Math.round(w*s); h = Math.round(h*s);
+  }
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  c.getContext("2d").drawImage(img,0,0,w,h);
+  return c;
+}
+
+/* ============================================================
+   STATION 1 — parse the catalog PDF entirely client-side
+   ============================================================ */
+pdfjsLib.GlobalWorkerOptions.workerSrc = "pdf.worker.min.js";
+
+const State = {
+  catalog: [],       // {id, page, name, category, seccion, specs:{}, imgDataUrl, hash}
+  pendingReviews: [], // photos awaiting confirmation
+  products: [],       // live mirror of db rows (for filtering/export)
+};
+
+const els = {
+  pdfInput: document.getElementById("pdf-input"),
+  pdfDropzone: document.getElementById("pdf-dropzone"),
+  pdfDzText: document.getElementById("pdf-dz-text"),
+  pdfProgressRow: document.getElementById("pdf-progress-row"),
+  pdfProgressText: document.getElementById("pdf-progress-text"),
+  pdfProgressBar: document.getElementById("pdf-progress-bar"),
+  catalogSummaryWrap: document.getElementById("catalog-summary-wrap"),
+  catalogCountPill: document.getElementById("catalog-count-pill"),
+  catalogImgPill: document.getElementById("catalog-img-pill"),
+  catalogGrid: document.getElementById("catalog-grid"),
+  catalogToggleGrid: document.getElementById("catalog-toggle-grid"),
+  catalogReload: document.getElementById("catalog-reload"),
+  photoInput: document.getElementById("photo-input"),
+  photoDropzone: document.getElementById("photo-dropzone"),
+  driveLinks: document.getElementById("drive-links"),
+  driveAddBtn: document.getElementById("drive-add-btn"),
+  matchProgressRow: document.getElementById("match-progress-row"),
+  matchProgressText: document.getElementById("match-progress-text"),
+  reviewList: document.getElementById("review-list"),
+  filterSeccion: document.getElementById("filter-seccion"),
+  filterText: document.getElementById("filter-text"),
+  exportBtn: document.getElementById("export-csv-btn"),
+  tableEmpty: document.getElementById("table-empty"),
+  tableScroll: document.getElementById("table-scroll"),
+  tableBody: document.getElementById("table-body"),
+};
+
+function setupDropzone(zoneEl, inputEl, onFiles){
+  zoneEl.addEventListener("dragover", e=>{ e.preventDefault(); zoneEl.classList.add("drag"); });
+  zoneEl.addEventListener("dragleave", ()=> zoneEl.classList.remove("drag"));
+  zoneEl.addEventListener("drop", e=>{
+    e.preventDefault(); zoneEl.classList.remove("drag");
+    if (e.dataTransfer.files && e.dataTransfer.files.length) onFiles(Array.from(e.dataTransfer.files));
+  });
+  inputEl.addEventListener("change", ()=>{
+    if (inputEl.files && inputEl.files.length) onFiles(Array.from(inputEl.files));
+    inputEl.value = "";
+  });
+}
+
+/* ---- text/image extraction for one page ---- */
+async function extractPageImages(page){
+  const OPS = pdfjsLib.OPS;
+  const viewport1 = page.getViewport({scale:1});
+  const opList = await page.getOperatorList();
+
+  // Pass 1: track the CTM through the operator list to find where each
+  // embedded image is placed on the page (pdf.js only decodes image pixel
+  // data during an actual render, so we don't touch page.objs here at all).
+  const stack = [];
+  let ctm = [1,0,0,1,0,0];
+  const seen = new Set();
+  const candidates = [];
+  for (let i=0;i<opList.fnArray.length;i++){
+    const fn = opList.fnArray[i];
+    const args = opList.argsArray[i];
+    if (fn === OPS.save){ stack.push(ctm.slice()); }
+    else if (fn === OPS.restore){ ctm = stack.pop() || ctm; }
+    else if (fn === OPS.transform){ ctm = pdfjsLib.Util.transform(ctm, args); }
+    else if (fn === OPS.paintImageXObject || fn === OPS.paintImageMaskXObject){
+      const objId = args[0];
+      const key = objId + "@" + ctm.join(",");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const corners = [[0,0],[1,0],[0,1],[1,1]].map(p => pdfjsLib.Util.applyTransform(p, ctm));
+      const pts = corners.map(p => pdfjsLib.Util.applyTransform(p, viewport1.transform));
+      const xs = pts.map(p=>p[0]), ys = pts.map(p=>p[1]);
+      const bbox = {x0:Math.min(...xs), x1:Math.max(...xs), y0:Math.min(...ys), y1:Math.max(...ys)};
+      if (bbox.x1-bbox.x0 < 60 || bbox.y1-bbox.y0 < 60) continue; // skip tiny logos/icons
+      candidates.push({objId, bbox});
+    }
+  }
+  if (!candidates.length) return [];
+
+  // Pass 2: render the whole page once and crop each candidate region out
+  // of that raster — sidesteps every colorspace/decode quirk (CMYK, JPX...).
+  const scale = 2;
+  const viewport = page.getViewport({scale});
+  const pageCanvas = document.createElement("canvas");
+  pageCanvas.width = Math.ceil(viewport.width);
+  pageCanvas.height = Math.ceil(viewport.height);
+  const pageCtx = pageCanvas.getContext("2d");
+  await page.render({canvasContext: pageCtx, viewport}).promise;
+
+  const out = [];
+  for (const cand of candidates){
+    const sx = cand.bbox.x0*scale, sy = cand.bbox.y0*scale;
+    const sw = (cand.bbox.x1-cand.bbox.x0)*scale, sh = (cand.bbox.y1-cand.bbox.y0)*scale;
+    if (sw <= 0 || sh <= 0) continue;
+    const maxDim = 480;
+    let ow = sw, oh = sh;
+    if (Math.max(ow,oh) > maxDim){
+      const s = maxDim/Math.max(ow,oh);
+      ow = Math.round(ow*s); oh = Math.round(oh*s);
+    }
+    const outCanvas = document.createElement("canvas");
+    outCanvas.width = Math.max(1,Math.round(ow));
+    outCanvas.height = Math.max(1,Math.round(oh));
+    outCanvas.getContext("2d").drawImage(pageCanvas, sx, sy, sw, sh, 0, 0, outCanvas.width, outCanvas.height);
+    out.push({
+      objId: cand.objId, bbox: cand.bbox,
+      cx: (cand.bbox.x0+cand.bbox.x1)/2, cy: (cand.bbox.y0+cand.bbox.y1)/2,
+      dataUrl: outCanvas.toDataURL("image/jpeg", 0.85),
+    });
+  }
+  return out;
+}
+
+async function extractPageTextItems(page){
+  const viewport = page.getViewport({scale:1});
+  const content = await page.getTextContent();
+  const items = [];
+  for (const it of content.items){
+    const text = (it.str||"").trim();
+    if (!text) continue;
+    const p = pdfjsLib.Util.applyTransform([it.transform[4], it.transform[5]], viewport.transform);
+    items.push({text, x:p[0], y:p[1]});
+  }
+  items.sort((a,b)=> a.y-b.y || a.x-b.x);
+  return items;
+}
+
+function buildPageProducts(items){
+  // 1) find category/name anchors (handles both "BUFFET" + "Aspen" as two
+  //    items, and "MESA ALTA Tossa" as one combined item)
+  const names = [];
+  for (let i=0;i<items.length;i++){
+    const it = items[i];
+    if (SPEC_LABELS.has(norm(it.text))) continue;
+    const m = matchCategoryToken(it.text);
+    if (!m) continue;
+    let fullName = m.rest;
+    let anchor = it;
+    if (!fullName){
+      // bare category word: look ahead for the next non-label, non-category item
+      for (let j=i+1;j<items.length;j++){
+        const nxt = items[j];
+        if (SPEC_LABELS.has(norm(nxt.text))) break;
+        if (matchCategoryToken(nxt.text)) break;
+        fullName = nxt.text.trim();
+        break;
+      }
+    }
+    if (!fullName) fullName = "(sin nombre)";
+    names.push({
+      category: m.token, name: `${m.token} ${fullName}`.trim(),
+      x: anchor.x, y: anchor.y, specs: {}, queue: []
+    });
+  }
+  if (!names.length) return [];
+
+  // 2) walk every item; label rows feed the nearest column's queue,
+  //    value rows consume the next queued label for that column
+  for (const it of items){
+    const n = norm(it.text);
+    if (matchCategoryToken(it.text)) continue; // already consumed as an anchor
+    let nearest = null, best = Infinity;
+    for (const p of names){
+      if (it.y < p.y - 2) continue; // must be at/below its anchor
+      const d = Math.abs(it.x - p.x);
+      if (d < best){ best = d; nearest = p; }
+    }
+    if (!nearest || best > 260) continue;
+    if (SPEC_LABELS.has(n)){
+      nearest.queue.push(n);
+    } else {
+      const label = nearest.queue.shift();
+      if (label && !(label in nearest.specs)) nearest.specs[label] = it.text.trim();
+    }
+  }
+  return names;
+}
+
+async function parseCatalogPdf(file){
+  els.pdfDropzone.hidden = true;
+  els.pdfProgressRow.hidden = false;
+  els.catalogSummaryWrap.hidden = true;
+  State.catalog = [];
+
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data: buf}).promise;
+  const total = pdf.numPages;
+
+  for (let pageNum=1; pageNum<=total; pageNum++){
+    els.pdfProgressText.textContent = `Leyendo página ${pageNum} de ${total}…`;
+    els.pdfProgressBar.style.width = Math.round((pageNum-1)/total*100) + "%";
+    let page;
+    try{ page = await pdf.getPage(pageNum); } catch(e){ continue; }
+
+    let textItems = [], images = [];
+    try{ textItems = await extractPageTextItems(page); }catch(e){ console.error("textItems err", e); }
+    try{ images = await extractPageImages(page); }catch(e){ console.error("images err", e); }
+
+    const products = buildPageProducts(textItems);
+    const usedImg = new Set();
+    function nearestImage(p){
+      let best=null, bd=Infinity;
+      for (const img of images){
+        if (usedImg.has(img.objId)) continue;
+        const d = Math.hypot(img.cx-p.x, img.cy-p.y);
+        if (d<bd){ bd=d; best=img; }
+      }
+      if (best) usedImg.add(best.objId);
+      return best;
+    }
+
+    if (products.length){
+      for (const p of products){
+        const img = nearestImage(p);
+        State.catalog.push({
+          id: `p${pageNum}_${State.catalog.length}`,
+          page: pageNum,
+          name: p.name,
+          category: p.category,
+          seccion: guessSeccion(p.category),
+          specs: p.specs,
+          imgDataUrl: img ? img.dataUrl : null,
+          hash: img ? computeDHashFromCanvasSource(await loadImageFromSrc(img.dataUrl)) : null,
+        });
+      }
+      // any leftover images on the page with no matched name still go in,
+      // so they stay searchable for manual matching
+      for (const img of images){
+        if (usedImg.has(img.objId)) continue;
+        State.catalog.push({
+          id: `p${pageNum}_img${State.catalog.length}`,
+          page: pageNum, name: `Imagen sin nombre — pág. ${pageNum}`,
+          category: "", seccion: "Otra", specs: {},
+          imgDataUrl: img.dataUrl,
+          hash: computeDHashFromCanvasSource(await loadImageFromSrc(img.dataUrl)),
+        });
+      }
+    } else if (images.length){
+      for (const img of images){
+        State.catalog.push({
+          id: `p${pageNum}_img${State.catalog.length}`,
+          page: pageNum, name: `Imagen sin nombre — pág. ${pageNum}`,
+          category: "", seccion: "Otra", specs: {},
+          imgDataUrl: img.dataUrl,
+          hash: computeDHashFromCanvasSource(await loadImageFromSrc(img.dataUrl)),
+        });
+      }
+    }
+  }
+
+  els.pdfProgressBar.style.width = "100%";
+  els.pdfProgressRow.hidden = true;
+  renderCatalogSummary();
+}
+
+function renderCatalogSummary(){
+  const named = State.catalog.filter(c => !c.name.startsWith("Imagen sin nombre"));
+  els.catalogCountPill.textContent = `${named.length} productos detectados`;
+  els.catalogImgPill.textContent = `${State.catalog.filter(c=>c.imgDataUrl).length} imágenes`;
+  els.catalogSummaryWrap.hidden = false;
+  els.catalogGrid.innerHTML = "";
+  for (const c of State.catalog){
+    const fig = document.createElement("figure");
+    const img = document.createElement("img");
+    img.src = c.imgDataUrl || "";
+    img.loading = "lazy";
+    const cap = document.createElement("figcaption");
+    cap.textContent = c.name;
+    fig.appendChild(img); fig.appendChild(cap);
+    els.catalogGrid.appendChild(fig);
+  }
+}
+
+els.catalogToggleGrid.addEventListener("click", ()=>{
+  const hidden = els.catalogGrid.hidden;
+  els.catalogGrid.hidden = !hidden;
+  els.catalogToggleGrid.textContent = hidden ? "Ocultar productos detectados" : "Ver productos detectados";
+});
+els.catalogReload.addEventListener("click", ()=>{
+  els.pdfDropzone.hidden = false;
+  els.catalogSummaryWrap.hidden = true;
+  State.catalog = [];
+});
+
+setupDropzone(els.pdfDropzone, els.pdfInput, files=>{
+  const f = files.find(f=>f.type==="application/pdf" || /\.pdf$/i.test(f.name));
+  if (!f){ toast("Ese archivo no parece un PDF."); return; }
+  parseCatalogPdf(f).catch(e=>{
+    console.error(e);
+    toast("No se pudo leer ese PDF. Intenta con otro archivo.");
+    els.pdfDropzone.hidden = false;
+    els.pdfProgressRow.hidden = true;
+  });
+});
+
+/* ============================================================
+   STATION 2 — photos & matching
+   ============================================================ */
+function driveDirectUrl(shareUrl){
+  const m = shareUrl.match(/\/d\/([a-zA-Z0-9_-]{10,})/) || shareUrl.match(/[?&]id=([a-zA-Z0-9_-]{10,})/);
+  if (!m) return null;
+  return `https://drive.google.com/uc?export=view&id=${m[1]}`;
+}
+
+async function addPhotoFromFile(file){
+  const dataUrl = await fileToDataUrl(file);
+  const img = await loadImageFromSrc(dataUrl, false);
+  return { name: file.name, previewUrl: dataUrl, blob: file, hash: computeDHashFromCanvasSource(img), fromDrive:false };
+}
+async function addPhotoFromDrive(shareUrl){
+  const direct = driveDirectUrl(shareUrl);
+  if (!direct) return null;
+  try{
+    const img = await loadImageFromSrc(direct, true);
+    const hash = computeDHashFromCanvasSource(img); // null if CORS blocked pixel reads
+    const c = canvasFromImage(img, 900);
+    const blob = await new Promise(res => c.toBlob(res, "image/jpeg", 0.9));
+    return { name: shareUrl, previewUrl: c.toDataURL("image/jpeg",0.85), blob, hash, fromDrive:true };
+  }catch(e){
+    return null;
+  }
+}
+
+function bestMatches(hash, topN){
+  if (!hash) return [];
+  const scored = State.catalog
+    .filter(c => c.hash)
+    .map(c => ({entry:c, dist: hamming(hash, c.hash)}))
+    .sort((a,b)=> a.dist-b.dist)
+    .slice(0, topN);
+  return scored;
+}
+
+function addReviewCard(photo){
+  const matches = bestMatches(photo.hash, 6);
+  const review = {
+    id: "r"+Math.random().toString(36).slice(2),
+    photo, matches,
+    chosen: matches[0] ? matches[0].entry : null,
+  };
+  State.pendingReviews.push(review);
+  renderReviewCard(review);
+}
+
+function renderReviewCard(review){
+  const card = document.createElement("div");
+  card.className = "review-card";
+  card.dataset.id = review.id;
+
+  const photoCol = document.createElement("div");
+  photoCol.className = "photo";
+  const pimg = document.createElement("img");
+  pimg.src = review.photo.previewUrl;
+  photoCol.appendChild(pimg);
+
+  const info = document.createElement("div");
+
+  const top = review.matches[0];
+  const noHash = !review.photo.hash;
+
+  const matchRow = document.createElement("div");
+  matchRow.className = "match-row";
+  const mimg = document.createElement("img");
+  const minfo = document.createElement("div");
+  minfo.className = "match-info";
+  function paintChosen(entry, confPct){
+    mimg.src = entry && entry.imgDataUrl ? entry.imgDataUrl : "";
+    let confBadge = "";
+    if (confPct != null){
+      const level = confPct >= 75 ? "good" : confPct >= 45 ? "warn" : "bad";
+      confBadge = `<span class="pill ${level}" style="margin-left:6px">${confPct}% similar</span>`;
+    }
+    minfo.innerHTML = entry
+      ? `<div class="name">${entry.name}${confBadge}</div><div class="meta">Pág. ${entry.page} · ${entry.seccion}${entry.specs.MEDIDAS? " · "+entry.specs.MEDIDAS:""}</div>`
+      : `<div class="name">Sin coincidencia — elige manualmente abajo</div>`;
+  }
+  paintChosen(review.chosen, top ? similarityPct(top.dist,64) : null);
+  matchRow.appendChild(mimg); matchRow.appendChild(minfo);
+  info.appendChild(matchRow);
+
+  if (noHash){
+    const warn = document.createElement("div");
+    warn.className = "note";
+    warn.textContent = "Esta imagen viene de un enlace de Drive sin permisos suficientes para comparar automáticamente. Elige el modelo correcto abajo.";
+    info.appendChild(warn);
+  }
+
+  // alternative matches / manual search
+  const details = document.createElement("details");
+  details.className = "pick-alt";
+  details.open = noHash || !top;
+  const summary = document.createElement("summary");
+  summary.textContent = "Elegir otro modelo del catálogo";
+  details.appendChild(summary);
+
+  const altGrid = document.createElement("div");
+  altGrid.className = "alt-grid";
+  const candidates = review.matches.length ? review.matches.map(m=>m.entry) : State.catalog.slice(0,30);
+  for (const entry of candidates){
+    const b = document.createElement("button");
+    b.type = "button";
+    if (review.chosen === entry) b.classList.add("chosen");
+    b.innerHTML = `<img src="${entry.imgDataUrl||""}"><div class="n">${entry.name}</div>`;
+    b.addEventListener("click", ()=>{
+      review.chosen = entry;
+      paintChosen(entry, null);
+      altGrid.querySelectorAll("button").forEach(x=>x.classList.remove("chosen"));
+      b.classList.add("chosen");
+    });
+    altGrid.appendChild(b);
+  }
+  const searchWrap = document.createElement("input");
+  searchWrap.className = "inp"; searchWrap.placeholder = "Buscar modelo por nombre…";
+  searchWrap.style.marginBottom = "8px";
+  searchWrap.addEventListener("input", ()=>{
+    const q = norm(searchWrap.value);
+    const filtered = q ? State.catalog.filter(c=>norm(c.name).includes(q)).slice(0,30) : candidates;
+    altGrid.innerHTML = "";
+    for (const entry of filtered){
+      const b = document.createElement("button");
+      b.type = "button";
+      if (review.chosen === entry) b.classList.add("chosen");
+      b.innerHTML = `<img src="${entry.imgDataUrl||""}"><div class="n">${entry.name}</div>`;
+      b.addEventListener("click", ()=>{
+        review.chosen = entry;
+        paintChosen(entry, null);
+        altGrid.querySelectorAll("button").forEach(x=>x.classList.remove("chosen"));
+        b.classList.add("chosen");
+      });
+      altGrid.appendChild(b);
+    }
+  });
+  details.appendChild(searchWrap);
+  details.appendChild(altGrid);
+  info.appendChild(details);
+
+  // editable fields
+  const grid = document.createElement("div");
+  grid.className = "grid2";
+  grid.style.marginTop = "10px";
+  const seccionSel = fieldSelect("Sección", ["Comedor","Sala","Escritorio","Otra"], review.chosen ? review.chosen.seccion : "Otra");
+  const modeloInp = fieldInput("Modelo", review.chosen ? review.chosen.name : "");
+  const coloresInp = fieldInput("Colores disponibles", "");
+  const medidasInp = fieldInput("Medidas (alto x ancho x profundidad)", review.chosen ? (review.chosen.specs.MEDIDAS||"") : "");
+  grid.appendChild(seccionSel.wrap); grid.appendChild(modeloInp.wrap);
+  grid.appendChild(coloresInp.wrap); grid.appendChild(medidasInp.wrap);
+  info.appendChild(grid);
+
+  const descInp = document.createElement("div");
+  descInp.style.marginTop = "8px";
+  const descField = fieldInput("Descripción / notas", review.chosen ? describeSpecs(review.chosen.specs) : "");
+  descInp.appendChild(descField.wrap);
+  info.appendChild(descInp);
+
+  // keep fields synced when a different catalog match is chosen
+  const origPaint = paintChosen;
+  function syncFieldsFromChoice(entry){
+    seccionSel.input.value = entry ? entry.seccion : "Otra";
+    if (!modeloInp.input.value || modeloInp.input.dataset.auto === "1"){
+      modeloInp.input.value = entry ? entry.name : "";
+      modeloInp.input.dataset.auto = "1";
+    }
+    if (!medidasInp.input.value || medidasInp.input.dataset.auto === "1"){
+      medidasInp.input.value = entry && entry.specs.MEDIDAS ? entry.specs.MEDIDAS : "";
+      medidasInp.input.dataset.auto = "1";
+    }
+    if (!descField.input.value || descField.input.dataset.auto === "1"){
+      descField.input.value = entry ? describeSpecs(entry.specs) : "";
+      descField.input.dataset.auto = "1";
+    }
+  }
+  modeloInp.input.dataset.auto = "1"; medidasInp.input.dataset.auto = "1"; descField.input.dataset.auto = "1";
+  modeloInp.input.addEventListener("input", ()=> modeloInp.input.dataset.auto = "0");
+  medidasInp.input.addEventListener("input", ()=> medidasInp.input.dataset.auto = "0");
+  descField.input.addEventListener("input", ()=> descField.input.dataset.auto = "0");
+
+  altGrid.addEventListener("click", ()=> syncFieldsFromChoice(review.chosen));
+  // patch button handlers above to also sync fields (search results too)
+  card.addEventListener("click", (e)=>{
+    if (e.target.closest(".alt-grid button")) syncFieldsFromChoice(review.chosen);
+  });
+
+  const actions = document.createElement("div");
+  actions.className = "actions-row";
+  const discardBtn = document.createElement("button");
+  discardBtn.className = "btn"; discardBtn.textContent = "Descartar";
+  discardBtn.addEventListener("click", ()=>{
+    State.pendingReviews = State.pendingReviews.filter(r=>r.id!==review.id);
+    card.remove();
+  });
+  const saveBtn = document.createElement("button");
+  saveBtn.className = "btn primary"; saveBtn.textContent = "Guardar en la tabla";
+  saveBtn.addEventListener("click", async ()=>{
+    saveBtn.disabled = true; saveBtn.textContent = "Guardando…";
+    try{
+      await saveProduct({
+        seccion: seccionSel.input.value,
+        modelo: modeloInp.input.value.trim() || "(sin nombre)",
+        colores: coloresInp.input.value.trim(),
+        medidas: medidasInp.input.value.trim(),
+        descripcion: descField.input.value.trim(),
+        pagina: review.chosen ? review.chosen.page : "",
+        photoBlob: review.photo.blob,
+        photoPreview: review.photo.previewUrl,
+      });
+      State.pendingReviews = State.pendingReviews.filter(r=>r.id!==review.id);
+      card.remove();
+      toast("Producto guardado.");
+    }catch(e){
+      console.error(e);
+      toast("No se pudo guardar. Intenta de nuevo.");
+      saveBtn.disabled = false; saveBtn.textContent = "Guardar en la tabla";
+    }
+  });
+  actions.appendChild(discardBtn); actions.appendChild(saveBtn);
+  info.appendChild(actions);
+
+  card.appendChild(photoCol); card.appendChild(info);
+  els.reviewList.prepend(card);
+}
+
+function fieldInput(label, value){
+  const wrap = document.createElement("div");
+  const l = document.createElement("label"); l.className="mini"; l.textContent = label;
+  const input = document.createElement("input"); input.className="inp"; input.value = value || "";
+  wrap.appendChild(l); wrap.appendChild(input);
+  return {wrap, input};
+}
+function fieldSelect(label, options, value){
+  const wrap = document.createElement("div");
+  const l = document.createElement("label"); l.className="mini"; l.textContent = label;
+  const input = document.createElement("select"); input.className="inp";
+  for (const o of options){
+    const opt = document.createElement("option"); opt.value = o; opt.textContent = o;
+    if (o === value) opt.selected = true;
+    input.appendChild(opt);
+  }
+  wrap.appendChild(l); wrap.appendChild(input);
+  return {wrap, input};
+}
+function describeSpecs(specs){
+  const parts = [];
+  for (const k of ["CUBIERTA","BASE","TAPIZ","PATAS","MATERIAL"]){
+    if (specs[k]) parts.push(`${k.toLowerCase()}: ${specs[k]}`);
+  }
+  return parts.join(" · ");
+}
+
+setupDropzone(els.photoDropzone, els.photoInput, async files=>{
+  if (!State.catalog.length){
+    toast("Primero sube el catálogo en la sección 1.");
+    return;
+  }
+  els.matchProgressRow.hidden = false;
+  for (const f of files){
+    els.matchProgressText.textContent = `Comparando ${f.name}…`;
+    try{
+      const photo = await addPhotoFromFile(f);
+      addReviewCard(photo);
+    }catch(e){ console.error(e); }
+  }
+  els.matchProgressRow.hidden = true;
+});
+
+els.driveAddBtn.addEventListener("click", async ()=>{
+  if (!State.catalog.length){
+    toast("Primero sube el catálogo en la sección 1.");
+    return;
+  }
+  const links = els.driveLinks.value.split("\n").map(s=>s.trim()).filter(Boolean);
+  if (!links.length) return;
+  els.matchProgressRow.hidden = false;
+  for (const link of links){
+    els.matchProgressText.textContent = `Cargando ${link}…`;
+    const photo = await addPhotoFromDrive(link);
+    if (!photo){
+      toast("No se pudo cargar un enlace de Drive (revisa que sea público).");
+      continue;
+    }
+    addReviewCard(photo);
+  }
+  els.matchProgressRow.hidden = true;
+  els.driveLinks.value = "";
+});
+
+/* ============================================================
+   STATION 3 — shared table (db + assets capabilities)
+   ============================================================ */
+let db = null, assets = null, downloads = null, canWrite = false;
+
+// Standalone mode: when this page runs outside claude.ai (e.g. hosted on
+// GitHub Pages or Vercel), window.claude doesn't exist at all. The table
+// then lives in this browser's localStorage instead of the shared database
+// — everything else (PDF parsing, hashing, matching) works exactly the same.
+const STANDALONE = (typeof window.claude === "undefined");
+const LocalStore = {
+  key: "catalogo_productos_v1",
+  read(){ try{ return JSON.parse(localStorage.getItem(this.key) || "[]"); }catch(e){ return []; } },
+  write(arr){ try{ localStorage.setItem(this.key, JSON.stringify(arr)); }catch(e){} },
+  listeners: [],
+  notify(){ const arr = this.read(); this.listeners.forEach(fn=>fn(arr)); },
+  subscribe(fn){ this.listeners.push(fn); fn(this.read()); },
+  add(data){
+    const arr = this.read();
+    const id = "local_" + Date.now() + "_" + Math.random().toString(36).slice(2,8);
+    arr.unshift({id, ...data});
+    this.write(arr); this.notify();
+  },
+  update(id, patch){
+    const arr = this.read();
+    const i = arr.findIndex(x=>x.id===id);
+    if (i>=0){ arr[i] = {...arr[i], ...patch}; this.write(arr); this.notify(); }
+  },
+  remove(id){ this.write(this.read().filter(x=>x.id!==id)); this.notify(); },
+};
+
+async function initCapabilities(){
+  if (STANDALONE){
+    LocalStore.subscribe(arr => { State.products = arr; renderTable(); });
+    return;
+  }
+  try{ db = await window.claude.use("db"); }catch(e){ db = null; }
+  try{ assets = await window.claude.use("assets"); }catch(e){ assets = null; }
+  try{ downloads = await window.claude.use("downloads"); }catch(e){ downloads = null; }
+  canWrite = !!assets; // assets is writer-only; mirrors write access for this page
+  if (!db){
+    els.tableEmpty.innerHTML = "<strong>No se pudo conectar la tabla compartida</strong>Puedes seguir usando el comparador; los resultados no se guardarán entre visitas.";
+    return;
+  }
+  subscribeProducts();
+}
+
+function subscribeProducts(){
+  db.collection("products").orderBy("createdAt","desc").onSnapshot(snap=>{
+    State.products = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    renderTable();
+  }, err=>{ console.error(err); });
+}
+
+async function saveProduct(p){
+  const base = {
+    seccion: p.seccion, modelo: p.modelo, colores: p.colores,
+    medidas: p.medidas, descripcion: p.descripcion, pagina: p.pagina,
+  };
+  if (STANDALONE){
+    LocalStore.add({...base, photoUrl: p.photoPreview, createdAt: new Date().toISOString()});
+    return;
+  }
+  if (!db){ toast("La tabla compartida no está disponible ahora mismo."); return; }
+  let photoAssetId = null, photoUrl = p.photoPreview;
+  if (assets && p.photoBlob){
+    try{
+      const up = await assets.upload(p.photoBlob, {type: p.photoBlob.type || "image/jpeg"});
+      photoAssetId = up.id; photoUrl = up.url;
+    }catch(e){ console.error(e); /* keep the local preview as a fallback */ }
+  }
+  await db.collection("products").add({...base, photoAssetId, photoUrl, createdAt: new Date().toISOString()});
+}
+
+async function updateProductField(id, field, value){
+  if (STANDALONE){ LocalStore.update(id, {[field]: value}); return; }
+  if (!db) return;
+  try{ await db.doc("products/"+id).update({[field]: value}); }
+  catch(e){ toast("No se pudo guardar el cambio."); }
+}
+async function deleteProduct(id){
+  if (STANDALONE){ LocalStore.remove(id); return; }
+  if (!db) return;
+  try{ await db.doc("products/"+id).delete(); }
+  catch(e){ toast("No se pudo borrar esa fila."); }
+}
+
+function renderTable(){
+  const seccion = els.filterSeccion.value;
+  const q = norm(els.filterText.value);
+  const rows = State.products.filter(p=>{
+    if (seccion && p.seccion !== seccion) return false;
+    if (q && !norm(p.modelo||"").includes(q)) return false;
+    return true;
+  });
+  els.tableBody.innerHTML = "";
+  if (!State.products.length){
+    els.tableEmpty.hidden = false; els.tableScroll.hidden = true;
+    return;
+  }
+  els.tableEmpty.hidden = true; els.tableScroll.hidden = false;
+  for (const p of rows){
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${p.photoUrl ? `<img src="${p.photoUrl}">` : ""}</td>
+      <td></td><td></td><td></td><td></td><td></td>
+      <td class="tabular">${p.pagina||""}</td>
+      <td></td>
+    `;
+    const cells = tr.querySelectorAll("td");
+    cells[1].appendChild(editableSelect(p, "seccion", ["Comedor","Sala","Escritorio","Otra"]));
+    cells[2].appendChild(editableText(p, "modelo"));
+    cells[3].appendChild(editableText(p, "colores"));
+    cells[4].appendChild(editableText(p, "medidas"));
+    cells[5].appendChild(editableText(p, "descripcion"));
+    const btns = document.createElement("div"); btns.className="rowbtns";
+    const del = document.createElement("button"); del.className="btn small"; del.textContent="Borrar";
+    del.addEventListener("click", ()=> deleteProduct(p.id));
+    btns.appendChild(del);
+    cells[7].appendChild(btns);
+    els.tableBody.appendChild(tr);
+  }
+}
+function editableText(p, field){
+  const input = document.createElement("input");
+  input.className = "inp"; input.value = p[field] || "";
+  input.addEventListener("change", ()=> updateProductField(p.id, field, input.value));
+  return input;
+}
+function editableSelect(p, field, options){
+  const sel = document.createElement("select"); sel.className="inp";
+  for (const o of options){
+    const opt = document.createElement("option"); opt.value=o; opt.textContent=o;
+    if (o === p[field]) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  sel.addEventListener("change", ()=> updateProductField(p.id, field, sel.value));
+  return sel;
+}
+
+els.filterSeccion.addEventListener("change", renderTable);
+els.filterText.addEventListener("input", renderTable);
+
+function toCsv(rows){
+  const headers = ["Sección","Categoría/Modelo","Colores disponibles","Medidas","Descripción","Página catálogo","URL foto"];
+  const esc = s => `"${String(s||"").replace(/"/g,'""')}"`;
+  const lines = [headers.map(esc).join(",")];
+  for (const p of rows){
+    lines.push([p.seccion,p.modelo,p.colores,p.medidas,p.descripcion,p.pagina,p.photoUrl].map(esc).join(","));
+  }
+  return lines.join("\r\n");
+}
+
+function downloadCsvClassic(csv){
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "catalogo-productos.csv";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=> URL.revokeObjectURL(url), 2000);
+}
+
+els.exportBtn.addEventListener("click", async ()=>{
+  if (!State.products.length){ toast("Todavía no hay productos guardados para exportar."); return; }
+  const csv = toCsv(State.products);
+  if (STANDALONE){
+    downloadCsvClassic(csv);
+    toast("CSV descargado.");
+    return;
+  }
+  if (!downloads){
+    toast("La descarga no está disponible en esta vista.");
+    return;
+  }
+  try{
+    await downloads.save({filename: "catalogo-productos.csv", data: csv});
+    toast("CSV descargado.");
+  }catch(e){
+    if (e && e.code === "declined") return;
+    toast("No se pudo descargar el CSV.");
+  }
+});
+
+initCapabilities();
+})();
+</script>
