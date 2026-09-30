@@ -221,15 +221,25 @@ label.mini{font-size:.7rem;color:var(--muted);display:block;margin-bottom:3px}
 select.inp{appearance:auto}
 
 .pick-alt{margin-top:8px}
-.pick-alt summary{font-size:.76rem;color:var(--accent);cursor:pointer}
-.alt-grid{display:flex;gap:8px;overflow-x:auto;padding:8px 0}
+.pick-alt summary{font-size:.8rem;color:var(--accent);cursor:pointer;font-weight:500}
+.pick-alt[open] summary{margin-bottom:8px}
+.pick-alt .inp{margin-bottom:8px}
+.alt-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;
+  max-height:380px;overflow-y:auto;padding:2px 2px 8px;
+}
 .alt-grid button{
   border:1px solid var(--border);background:var(--surface);border-radius:8px;
-  padding:6px;cursor:pointer;flex:none;width:76px;text-align:center;
+  padding:6px;cursor:pointer;text-align:center;min-width:0;color:var(--fg);
 }
+.alt-grid button:hover{border-color:var(--accent)}
 .alt-grid button.chosen{border-color:var(--accent);background:var(--surface-2)}
 .alt-grid img{width:100%;aspect-ratio:1;object-fit:contain;border-radius:5px}
-.alt-grid .n{font-size:.6rem;color:var(--muted);margin-top:3px;line-height:1.15;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.alt-grid .n{font-size:.66rem;margin-top:4px;line-height:1.2;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word}
+.alt-grid .pg{font-size:.6rem;color:var(--muted);margin-top:2px}
+.alt-grid .note{grid-column:1/-1}
+.analyzing{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:.84rem;margin-top:4px}
+.photo-name{font-size:.66rem;color:var(--muted);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 .actions-row{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
 
@@ -290,13 +300,13 @@ table.products img{width:40px;height:40px;object-fit:cover;border-radius:6px;bor
 
     <ol class="howto" aria-label="Cómo funciona">
       <li><span class="n">1</span><div><b>Carga el catálogo</b><span class="muted">Sube el PDF. Se leen sus productos, fotos y medidas.</span></div></li>
-      <li><span class="n">2</span><div><b>Sube tus fotos</b><span class="muted">Revisa la sugerencia de cada foto y guárdala.</span></div></li>
+      <li><span class="n">2</span><div><b>Sube tus fotos</b><span class="muted">La IA sugiere el modelo; revísalo y guárdalo.</span></div></li>
       <li><span class="n">3</span><div><b>Descarga la tabla</b><span class="muted">Edita lo que haga falta y exporta a CSV.</span></div></li>
     </ol>
 
     <div class="privacy">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
-      El PDF y las fotos se procesan en tu navegador; no se envían a ningún servidor.
+      El PDF se lee en tu navegador. Para identificar cada foto, se envía junto con las imágenes del catálogo a la IA (Claude); nada se guarda en un servidor.
     </div>
   </header>
 
@@ -344,7 +354,7 @@ table.products img{width:40px;height:40px;object-fit:cover;border-radius:6px;bor
         <div class="station-num">2</div>
         <div class="station-head-text">
           <h2>Sube las fotos a identificar</h2>
-          <div class="sub">Cada foto se compara con el catálogo. Revisa la sugerencia, ajusta los datos y pulsa <b>Guardar en la tabla</b>.</div>
+          <div class="sub">La IA busca cada foto en el catálogo y llena modelo, colores y medidas. Revisa la sugerencia, corrige lo que haga falta y pulsa <b>Guardar en la tabla</b>.</div>
         </div>
       </div>
 
@@ -557,7 +567,8 @@ function canvasFromImage(img, maxDim){
 pdfjsLib.GlobalWorkerOptions.workerSrc = "pdf.worker.min.js";
 
 const State = {
-  catalog: [],       // {id, page, name, category, seccion, specs:{}, imgDataUrl, hash}
+  catalog: [],       // {id, idx, page, name, unnamed, category, seccion, specs:{}, imgDataUrl, thumb, hash}
+  pages: {},         // pageNum -> JPEG data URL of the whole page (sent to the AI to read names)
   pendingReviews: [], // photos awaiting confirmation
   products: [],       // live mirror of db rows (for filtering/export)
 };
@@ -622,7 +633,7 @@ function setupDropzone(zoneEl, inputEl, onFiles){
 }
 
 /* ---- text/image extraction for one page ---- */
-async function extractPageImages(page){
+async function extractPageImages(page, pageNum){
   const OPS = pdfjsLib.OPS;
   const viewport1 = page.getViewport({scale:1});
   const opList = await page.getOperatorList();
@@ -664,6 +675,7 @@ async function extractPageImages(page){
   pageCanvas.height = Math.ceil(viewport.height);
   const pageCtx = pageCanvas.getContext("2d");
   await page.render({canvasContext: pageCtx, viewport}).promise;
+  State.pages[pageNum] = canvasFromImage(pageCanvas, 1400).toDataURL("image/jpeg", 0.8);
 
   const out = [];
   for (const cand of candidates){
@@ -759,6 +771,7 @@ async function parseCatalogPdf(file){
   els.pdfProgressRow.hidden = false;
   els.catalogSummaryWrap.hidden = true;
   State.catalog = [];
+  State.pages = {};
 
   const buf = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({data: buf}).promise;
@@ -772,7 +785,7 @@ async function parseCatalogPdf(file){
 
     let textItems = [], images = [];
     try{ textItems = await extractPageTextItems(page); }catch(e){ console.error("textItems err", e); }
-    try{ images = await extractPageImages(page); }catch(e){ console.error("images err", e); }
+    try{ images = await extractPageImages(page, pageNum); }catch(e){ console.error("images err", e); }
 
     const products = buildPageProducts(textItems);
     const usedImg = new Set();
@@ -826,14 +839,23 @@ async function parseCatalogPdf(file){
     }
   }
 
+  // small thumbnails are what the AI compares against (keeps requests small)
+  els.pdfProgressText.textContent = "Preparando imágenes del catálogo…";
+  for (let i=0;i<State.catalog.length;i++){
+    const c = State.catalog[i];
+    c.idx = i;
+    c.unnamed = c.name.startsWith("Imagen sin nombre") || c.name.includes("(sin nombre)");
+    c.thumb = c.imgDataUrl ? await shrinkDataUrl(c.imgDataUrl, 200) : null;
+  }
+
   els.pdfProgressBar.style.width = "100%";
   els.pdfProgressRow.hidden = true;
   renderCatalogSummary();
 }
 
 function renderCatalogSummary(){
-  const named = State.catalog.filter(c => !c.name.startsWith("Imagen sin nombre"));
-  els.catalogCountPill.textContent = `${named.length} productos detectados`;
+  const named = State.catalog.filter(c => !c.unnamed);
+  els.catalogCountPill.textContent = named.length === 1 ? "1 producto detectado" : `${named.length} productos detectados`;
   els.catalogImgPill.textContent = `${State.catalog.filter(c=>c.imgDataUrl).length} imágenes`;
   els.catalogSummaryWrap.hidden = false;
   setCatalogReady(State.catalog.length > 0);
@@ -859,6 +881,7 @@ els.catalogReload.addEventListener("click", ()=>{
   els.pdfDropzone.hidden = false;
   els.catalogSummaryWrap.hidden = true;
   State.catalog = [];
+  State.pages = {};
   setCatalogReady(false);
 });
 
@@ -944,26 +967,136 @@ async function addPhotoFromDrive(shareUrl){
   }
 }
 
-function bestMatches(hash, topN){
+/* ---------- AI matching (Vercel functions in /api, Claude vision) ----------
+   aiState: "unknown" until the first call answers, then "on" or "off".
+   "off" means no /api (local static server) or no ANTHROPIC_API_KEY; the
+   page then falls back to the dHash ranking below. */
+let aiState = "unknown";
+const AI_CHUNK = 80;          // catalog images per /api/ai-match request
+const AI_PHOTO_DIM = 640;     // photo size sent to the AI
+
+class AiUnavailable extends Error{}
+
+async function postAi(path, body){
+  let r;
+  try{
+    r = await fetch(path, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)});
+  }catch(e){ throw new Error("network"); }
+  const isJson = (r.headers.get("content-type") || "").includes("application/json");
+  if (!isJson){ aiState = "off"; throw new AiUnavailable(); }
+  const data = await r.json();
+  if (!r.ok){
+    if (data.error === "missing_key" || data.error === "bad_key"){ aiState = "off"; throw new AiUnavailable(); }
+    throw new Error(data.error || "ai_error");
+  }
+  aiState = "on";
+  return data;
+}
+
+// at most N photos analyzed at once, so a 100-photo folder doesn't fire 100 requests
+function makeLimiter(max){
+  let active = 0;
+  const waiting = [];
+  return async function run(fn){
+    if (active >= max) await new Promise(res => waiting.push(res));
+    active++;
+    try{ return await fn(); }
+    finally{ active--; const next = waiting.shift(); if (next) next(); }
+  };
+}
+const aiLimit = makeLimiter(2);
+
+async function photoAiData(photo){
+  if (!photo.aiData) photo.aiData = await shrinkDataUrl(photo.previewUrl, AI_PHOTO_DIM);
+  return photo.aiData;
+}
+
+function matchRequest(photo, entries){
+  return postAi("api/ai-match", {
+    photo: {data: photo.aiData, name: photo.fromDrive ? photo.name.split("/").pop() : photo.name},
+    candidates: entries.map(e => ({i: e.idx, name: e.name, data: e.thumb})),
+  });
+}
+
+// Returns {entry, confidence, ranked:[entries], reason, type}. Big catalogs
+// run in chunks, then a final round over each chunk's best guesses.
+async function aiMatch(photo){
+  await photoAiData(photo);
+  let pool = State.catalog.filter(c => c.thumb);
+  if (!pool.length) return null;
+  if (pool.length > AI_CHUNK){
+    const chunks = [];
+    for (let i=0;i<pool.length;i+=AI_CHUNK) chunks.push(pool.slice(i, i+AI_CHUNK));
+    const results = await Promise.all(chunks.map(ch => matchRequest(photo, ch)));
+    const finalists = new Set();
+    for (const r of results){
+      for (const i of [r.best, ...r.alternatives.slice(0,2)]) if (i >= 0) finalists.add(State.catalog[i]);
+    }
+    if (!finalists.size) return {entry:null, confidence:0, ranked:[], reason:"", type: results[0].photo_product_type};
+    pool = [...finalists].slice(0, AI_CHUNK);
+  }
+  const r = await matchRequest(photo, pool);
+  const entry = r.best >= 0 ? State.catalog[r.best] : null;
+  const ranked = [entry, ...r.alternatives.map(i => State.catalog[i])].filter(Boolean);
+  return {entry, confidence: r.confidence, ranked, reason: r.reason, type: r.photo_product_type};
+}
+
+// Reads model / colors / measurements from the rendered catalog page.
+// Cached per catalog entry; returns null when the AI isn't available.
+async function aiDetails(photo, entry){
+  if (aiState === "off" || !entry || !entry.imgDataUrl || !State.pages[entry.page]) return null;
+  if (entry.aiDetails) return entry.aiDetails;
+  await photoAiData(photo);
+  const d = await postAi("api/ai-details", {
+    photo: {data: photo.aiData, name: photo.fromDrive ? photo.name.split("/").pop() : photo.name},
+    product: {data: entry.imgDataUrl, name: entry.name, specs: entry.specs},
+    page: {data: State.pages[entry.page], number: entry.page},
+  });
+  entry.aiDetails = d;
+  if (entry.unnamed && d.modelo){ entry.name = d.modelo; entry.unnamed = false; }
+  return d;
+}
+
+/* ---------- visual-hash fallback ---------- */
+function hashRanking(hash){
   if (!hash) return [];
-  const scored = State.catalog
+  return State.catalog
     .filter(c => c.hash)
     .map(c => ({entry:c, dist: hamming(hash, c.hash)}))
-    .sort((a,b)=> a.dist-b.dist)
-    .slice(0, topN);
-  return scored;
+    .sort((a,b)=> a.dist-b.dist);
 }
 
 function addReviewCard(photo){
-  const matches = bestMatches(photo.hash, 6);
+  const byHash = hashRanking(photo.hash);
   const review = {
     id: "r"+Math.random().toString(36).slice(2),
-    photo, matches,
-    chosen: matches[0] ? matches[0].entry : null,
+    photo,
+    hashTop: byHash[0] || null,
+    ranked: byHash.map(m => m.entry),   // order shown in "elegir otro modelo"
+    chosen: null,
+    ai: null,                           // AI result once it answers
   };
   State.pendingReviews.push(review);
-  renderReviewCard(review);
+  const card = renderReviewCard(review);
   updateReviewCount();
+
+  if (aiState === "off"){ card.useHashMatch(); return; }
+  card.setAnalyzing(true);
+  aiLimit(()=> aiMatch(photo)).then(res => {
+    card.setAnalyzing(false);
+    if (!res){ card.useHashMatch(); return; }
+    review.ai = res;
+    const rest = review.ranked.filter(e => !res.ranked.includes(e));
+    review.ranked = [...res.ranked, ...rest];
+    card.choose(res.entry, {ai: true});
+  }).catch(e => {
+    card.setAnalyzing(false);
+    if (!(e instanceof AiUnavailable)){
+      console.error(e);
+      card.setNote("La IA no respondió para esta foto; la sugerencia es por parecido visual y puede fallar. Revísala.");
+    }
+    card.useHashMatch();
+  });
 }
 
 function renderReviewCard(review){
@@ -973,143 +1106,186 @@ function renderReviewCard(review){
 
   const photoCol = document.createElement("div");
   photoCol.className = "photo";
+  const pcap = document.createElement("div");
+  pcap.className = "cap"; pcap.textContent = "Tu foto";
   const pimg = document.createElement("img");
   pimg.src = review.photo.previewUrl;
   pimg.alt = "Tu foto";
-  const pcap = document.createElement("div");
-  pcap.className = "cap"; pcap.textContent = "Tu foto";
-  photoCol.appendChild(pcap);
-  photoCol.appendChild(pimg);
+  const pname = document.createElement("div");
+  pname.className = "photo-name";
+  pname.textContent = review.photo.fromDrive ? review.photo.name.split("/").pop() : review.photo.name;
+  photoCol.append(pcap, pimg, pname);
 
   const info = document.createElement("div");
 
-  const top = review.matches[0];
-  const noHash = !review.photo.hash;
-
+  // --- suggested match ---
   const matchRow = document.createElement("div");
   matchRow.className = "match-row";
   const mimg = document.createElement("img");
+  mimg.alt = "";
   const minfo = document.createElement("div");
   minfo.className = "match-info";
-  function paintChosen(entry, confPct){
-    mimg.src = entry && entry.imgDataUrl ? entry.imgDataUrl : "";
-    let confBadge = "";
-    if (confPct != null){
-      const level = confPct >= 75 ? "good" : confPct >= 45 ? "warn" : "bad";
-      confBadge = `<span class="pill ${level}">${confPct}% parecido</span>`;
-    }
-    minfo.innerHTML = entry
-      ? `<div class="cap">Sugerencia del catálogo</div><div class="name">${escapeHtml(entry.name)}${confBadge}</div><div class="meta">Pág. ${entry.page} · ${escapeHtml(entry.seccion)}${entry.specs.MEDIDAS? " · "+escapeHtml(entry.specs.MEDIDAS):""}</div>`
-      : `<div class="cap">Sugerencia del catálogo</div><div class="name">Sin coincidencia — elige el modelo abajo</div>`;
-  }
-  paintChosen(review.chosen, top ? similarityPct(top.dist,64) : null);
-  matchRow.appendChild(mimg); matchRow.appendChild(minfo);
+  matchRow.append(mimg, minfo);
   info.appendChild(matchRow);
 
-  if (noHash){
-    const warn = document.createElement("div");
-    warn.className = "note";
-    warn.textContent = "Esta imagen viene de un enlace de Drive sin permisos suficientes para comparar automáticamente. Elige el modelo correcto abajo.";
-    info.appendChild(warn);
+  function paintChosen(entry, badge){
+    mimg.src = entry && entry.imgDataUrl ? entry.imgDataUrl : "";
+    mimg.hidden = !entry;
+    let badgeHtml = "";
+    if (badge){
+      const level = badge.pct >= 75 ? "good" : badge.pct >= 45 ? "warn" : "bad";
+      badgeHtml = `<span class="pill ${level}">${escapeHtml(badge.label)}</span>`;
+    }
+    const reason = review.ai && review.ai.entry === entry && review.ai.reason
+      ? `<div class="meta">${escapeHtml(review.ai.reason)}</div>` : "";
+    if (entry){
+      minfo.innerHTML = `<div class="cap">Sugerencia del catálogo</div><div class="name">${escapeHtml(entry.name)}${badgeHtml}</div><div class="meta">Pág. ${entry.page} · ${escapeHtml(entry.seccion)}${entry.specs.MEDIDAS? " · "+escapeHtml(entry.specs.MEDIDAS):""}</div>${reason}`;
+    } else {
+      const what = review.ai && review.ai.type ? ` (parece: ${escapeHtml(review.ai.type)})` : "";
+      minfo.innerHTML = `<div class="cap">Sugerencia del catálogo</div><div class="name">No se encontró en el catálogo${what}</div><div class="meta">Elige el modelo abajo si sí está, o escribe los datos a mano.</div>`;
+    }
+  }
+  function paintAnalyzing(){
+    mimg.hidden = true;
+    minfo.innerHTML = `<div class="cap">Sugerencia del catálogo</div><div class="analyzing"><span class="spinner"></span>Analizando con IA…</div>`;
   }
 
-  // alternative matches / manual search
+  const noteEl = document.createElement("div");
+  noteEl.className = "note";
+  noteEl.hidden = true;
+  info.appendChild(noteEl);
+  function setNote(text){ noteEl.textContent = text || ""; noteEl.hidden = !text; }
+  if (!review.photo.hash && aiState === "off"){
+    setNote("Esta imagen viene de un enlace de Drive sin permisos suficientes para comparar automáticamente. Elige el modelo correcto abajo.");
+  }
+
+  // --- pick another model: every detected product, best guesses first ---
   const details = document.createElement("details");
   details.className = "pick-alt";
-  details.open = noHash || !top;
   const summary = document.createElement("summary");
-  summary.textContent = "¿No es este? Elegir otro modelo del catálogo";
-  details.appendChild(summary);
-
+  summary.textContent = `¿No es este? Ver los ${State.catalog.length} productos del catálogo`;
+  const searchInp = document.createElement("input");
+  searchInp.className = "inp";
+  searchInp.placeholder = "Filtrar por nombre o página (ej. silla, 40)…";
   const altGrid = document.createElement("div");
   altGrid.className = "alt-grid";
-  const candidates = review.matches.length ? review.matches.map(m=>m.entry) : State.catalog.slice(0,30);
-  for (const entry of candidates){
-    const b = document.createElement("button");
-    b.type = "button";
-    if (review.chosen === entry) b.classList.add("chosen");
-    b.innerHTML = `<img src="${entry.imgDataUrl||""}" alt=""><div class="n">${escapeHtml(entry.name)}</div>`;
-    b.title = entry.name;
-    b.addEventListener("click", ()=>{
-      review.chosen = entry;
-      paintChosen(entry, null);
-      altGrid.querySelectorAll("button").forEach(x=>x.classList.remove("chosen"));
-      b.classList.add("chosen");
-    });
-    altGrid.appendChild(b);
+  details.append(summary, searchInp, altGrid);
+  info.appendChild(details);
+
+  function orderedCatalog(){
+    const seen = new Set(review.ranked);
+    return [...review.ranked, ...State.catalog.filter(c => !seen.has(c))];
   }
-  const searchWrap = document.createElement("input");
-  searchWrap.className = "inp"; searchWrap.placeholder = "Buscar modelo por nombre…";
-  searchWrap.style.marginBottom = "8px";
-  searchWrap.addEventListener("input", ()=>{
-    const q = norm(searchWrap.value);
-    const filtered = q ? State.catalog.filter(c=>norm(c.name).includes(q)).slice(0,30) : candidates;
+  function renderAltGrid(){
+    const q = norm(searchInp.value);
+    const list = orderedCatalog().filter(c => !q || norm(c.name).includes(q) || String(c.page) === q);
     altGrid.innerHTML = "";
-    for (const entry of filtered){
+    if (!list.length){
+      altGrid.innerHTML = `<div class="note">Ningún producto coincide con “${escapeHtml(searchInp.value)}”.</div>`;
+      return;
+    }
+    for (const entry of list){
       const b = document.createElement("button");
       b.type = "button";
       if (review.chosen === entry) b.classList.add("chosen");
-      b.innerHTML = `<img src="${entry.imgDataUrl||""}" alt=""><div class="n">${escapeHtml(entry.name)}</div>`;
-      b.title = entry.name;
+      b.title = `${entry.name} · pág. ${entry.page}`;
+      b.innerHTML = `<img src="${entry.imgDataUrl||""}" alt="" loading="lazy"><div class="n">${escapeHtml(entry.name.startsWith("Imagen sin nombre") ? "Sin nombre" : entry.name)}</div><div class="pg">pág. ${entry.page}</div>`;
       b.addEventListener("click", ()=>{
-        review.chosen = entry;
-        paintChosen(entry, null);
+        choose(entry, {manual: true});
         altGrid.querySelectorAll("button").forEach(x=>x.classList.remove("chosen"));
         b.classList.add("chosen");
       });
       altGrid.appendChild(b);
     }
-  });
-  details.appendChild(searchWrap);
-  details.appendChild(altGrid);
-  info.appendChild(details);
+  }
+  details.addEventListener("toggle", ()=>{ if (details.open) renderAltGrid(); });
+  searchInp.addEventListener("input", renderAltGrid);
 
-  // editable fields
+  // --- editable fields ---
   const grid = document.createElement("div");
   grid.className = "grid2";
   grid.style.marginTop = "10px";
-  const seccionSel = fieldSelect("Sección", ["Comedor","Sala","Escritorio","Otra"], review.chosen ? review.chosen.seccion : "Otra");
-  const modeloInp = fieldInput("Modelo", review.chosen ? review.chosen.name : "");
+  const seccionSel = fieldSelect("Sección", ["Comedor","Sala","Escritorio","Otra"], "Otra");
+  const modeloInp = fieldInput("Modelo", "");
   const coloresInp = fieldInput("Colores disponibles", "");
-  const medidasInp = fieldInput("Medidas (alto x ancho x profundidad)", review.chosen ? (review.chosen.specs.MEDIDAS||"") : "");
-  grid.appendChild(seccionSel.wrap); grid.appendChild(modeloInp.wrap);
-  grid.appendChild(coloresInp.wrap); grid.appendChild(medidasInp.wrap);
+  const medidasInp = fieldInput("Medidas (alto x ancho x profundidad)", "");
+  grid.append(seccionSel.wrap, modeloInp.wrap, coloresInp.wrap, medidasInp.wrap);
   info.appendChild(grid);
+  const descWrap = document.createElement("div");
+  descWrap.style.marginTop = "8px";
+  const descField = fieldInput("Descripción / notas", "");
+  descWrap.appendChild(descField.wrap);
+  info.appendChild(descWrap);
 
-  const descInp = document.createElement("div");
-  descInp.style.marginTop = "8px";
-  const descField = fieldInput("Descripción / notas", review.chosen ? describeSpecs(review.chosen.specs) : "");
-  descInp.appendChild(descField.wrap);
-  info.appendChild(descInp);
+  const fieldsStatus = document.createElement("div");
+  fieldsStatus.className = "note";
+  fieldsStatus.hidden = true;
+  info.appendChild(fieldsStatus);
 
-  // keep fields synced when a different catalog match is chosen
-  const origPaint = paintChosen;
-  function syncFieldsFromChoice(entry){
+  // Fields the user typed in are never overwritten by automatic fills.
+  const autoFields = [modeloInp, coloresInp, medidasInp, descField];
+  autoFields.forEach(f => {
+    f.input.dataset.auto = "1";
+    f.input.addEventListener("input", ()=> f.input.dataset.auto = "0");
+  });
+  function fill(field, value){
+    if (field.input.dataset.auto === "1") field.input.value = value || "";
+  }
+  function fillFromEntry(entry){
     seccionSel.input.value = entry ? entry.seccion : "Otra";
-    if (!modeloInp.input.value || modeloInp.input.dataset.auto === "1"){
-      modeloInp.input.value = entry ? entry.name : "";
-      modeloInp.input.dataset.auto = "1";
-    }
-    if (!medidasInp.input.value || medidasInp.input.dataset.auto === "1"){
-      medidasInp.input.value = entry && entry.specs.MEDIDAS ? entry.specs.MEDIDAS : "";
-      medidasInp.input.dataset.auto = "1";
-    }
-    if (!descField.input.value || descField.input.dataset.auto === "1"){
-      descField.input.value = entry ? describeSpecs(entry.specs) : "";
-      descField.input.dataset.auto = "1";
+    fill(modeloInp, entry ? (entry.unnamed ? entry.category : entry.name) : "");
+    fill(coloresInp, "");
+    fill(medidasInp, entry ? entry.specs.MEDIDAS || "" : "");
+    fill(descField, entry ? describeSpecs(entry.specs) : "");
+  }
+  function fillFromDetails(d){
+    seccionSel.input.value = d.seccion;
+    fill(modeloInp, d.modelo);
+    fill(coloresInp, d.colores);
+    fill(medidasInp, d.medidas);
+    fill(descField, d.descripcion);
+  }
+
+  let detailsToken = 0;
+  async function loadDetails(entry){
+    const token = ++detailsToken;
+    if (!entry || aiState === "off"){ fieldsStatus.hidden = true; return; }
+    fieldsStatus.hidden = false;
+    fieldsStatus.innerHTML = `<span class="analyzing"><span class="spinner"></span>Leyendo los datos del producto en la página ${entry.page} del catálogo…</span>`;
+    try{
+      const d = await aiLimit(()=> aiDetails(review.photo, entry));
+      if (token !== detailsToken) return; // user picked another model meanwhile
+      if (!d){ fieldsStatus.hidden = true; return; }
+      fillFromDetails(d);
+      paintChosen(entry, currentBadge(entry));
+      fieldsStatus.textContent = "Datos leídos del catálogo con IA. Revísalos antes de guardar.";
+    }catch(e){
+      if (token !== detailsToken) return;
+      if (!(e instanceof AiUnavailable)) console.error(e);
+      fieldsStatus.hidden = e instanceof AiUnavailable;
+      fieldsStatus.textContent = "No se pudieron leer los datos con IA; complétalos a mano.";
     }
   }
-  modeloInp.input.dataset.auto = "1"; medidasInp.input.dataset.auto = "1"; descField.input.dataset.auto = "1";
-  modeloInp.input.addEventListener("input", ()=> modeloInp.input.dataset.auto = "0");
-  medidasInp.input.addEventListener("input", ()=> medidasInp.input.dataset.auto = "0");
-  descField.input.addEventListener("input", ()=> descField.input.dataset.auto = "0");
 
-  altGrid.addEventListener("click", ()=> syncFieldsFromChoice(review.chosen));
-  // patch button handlers above to also sync fields (search results too)
-  card.addEventListener("click", (e)=>{
-    if (e.target.closest(".alt-grid button")) syncFieldsFromChoice(review.chosen);
-  });
+  function currentBadge(entry){
+    if (review.ai && review.ai.entry === entry && entry) return {pct: review.ai.confidence, label: `IA: ${review.ai.confidence}% seguro`};
+    if (!review.ai && review.hashTop && review.hashTop.entry === entry){
+      const pct = similarityPct(review.hashTop.dist, 64);
+      return {pct, label: `${pct}% parecido`};
+    }
+    return null;
+  }
 
+  function choose(entry, opts){
+    review.chosen = entry;
+    paintChosen(entry, currentBadge(entry));
+    fillFromEntry(entry);
+    if (opts && opts.manual) setNote("");
+    loadDetails(entry);
+    if (!entry && !(opts && opts.manual)) details.open = true;
+  }
+
+  // --- actions ---
   const actions = document.createElement("div");
   actions.className = "actions-row";
   const discardBtn = document.createElement("button");
@@ -1144,11 +1320,18 @@ function renderReviewCard(review){
       saveBtn.disabled = false; saveBtn.textContent = "Guardar en la tabla";
     }
   });
-  actions.appendChild(discardBtn); actions.appendChild(saveBtn);
+  actions.append(discardBtn, saveBtn);
   info.appendChild(actions);
 
-  card.appendChild(photoCol); card.appendChild(info);
+  card.append(photoCol, info);
   els.reviewList.prepend(card);
+
+  return {
+    choose,
+    setNote,
+    setAnalyzing(on){ if (on) paintAnalyzing(); },
+    useHashMatch(){ choose(review.hashTop ? review.hashTop.entry : null, {}); },
+  };
 }
 
 function fieldInput(label, value){

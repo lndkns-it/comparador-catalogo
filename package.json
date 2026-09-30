@@ -1,0 +1,9 @@
+{
+  "name": "comparador-catalogo",
+  "private": true,
+  "description": "Identifica productos de un catálogo PDF a partir de fotos",
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.130.0"
+  }
+}

@@ -19,11 +19,14 @@ People who don't know the code use the page, and it gets shared with them by lin
 
 - `index.html`: the whole app (HTML + CSS + JS in one file, no framework, no build step).
 - `pdf.min.js` / `pdf.worker.min.js`: vendored PDF.js bundle. Don't edit these files.
-- `api/`: Vercel serverless functions (CommonJS) for Google Drive.
+- `api/`: Vercel serverless functions (CommonJS). `package.json` only exists for their dependency (`@anthropic-ai/sdk`); the page itself has no build step. `vercel.json` gives the AI functions a 60s `maxDuration`.
+  - `ai-match.js`: POST `{photo, candidates:[{i,name,data}]}` (≤ 80). Claude (`claude-opus-5-5`, effort `medium`, structured JSON output) picks the candidate showing the same model, or `-1`. It returns `{photo_product_type, best, confidence, alternatives, reason}`. The candidate images come before the photo, with a cache breakpoint on the last one, so repeat photos reuse the cached catalog prefix.
+  - `ai-details.js`: POST `{photo, product, page}`. Reads `{modelo, colores, medidas, descripcion, seccion}` from the rendered catalog page (effort `low`). This is how names printed inside images end up in "Modelo".
+  - `_claude.js`: shared client, `fallbacks: "default"` (beta `server-side-fallback-2026-07-01`), refusal and error mapping. They need the **`ANTHROPIC_API_KEY`** env var.
   - `drive-list.js`: `?link=` takes a folder or file link and returns `{folder, images:[{id,name}], truncated}`. It walks subfolders (depth ≤ 5, at most 1000 images).
   - `drive-image.js`: `?id=` proxies one image, preferring Drive's `=s1000` thumbnail so the response stays under Vercel's 4.5MB body limit.
   - `_drive.js`: shared helpers. The underscore keeps it from becoming a route.
-  - They need the **`GOOGLE_API_KEY`** env var in Vercel: a Google Cloud API key with the Drive API enabled. Folders must be shared as "Cualquier persona con el enlace".
+  - The Drive functions need the **`GOOGLE_API_KEY`** env var in Vercel: a Google Cloud API key with the Drive API enabled. Folders must be shared as "Cualquier persona con el enlace".
 - `README.md`: public, Spanish-language project description.
 
 ## Running it
@@ -34,6 +37,8 @@ It's a static site. Serve it over HTTP, because the PDF.js worker doesn't load f
 python -m http.server 8000   # then open http://localhost:8000/index.html
 ```
 
+`python -m http.server` has no `/api`, so the page runs without AI or Drive folders (it falls back to the visual hash). Use `vercel dev` to run the functions locally.
+
 There are no tests and no linter. To check the script for syntax errors, pull the `<script>` block out of the page and run `node --check` on it. To check the layout, take a headless Chrome screenshot (`chrome --headless=new --screenshot=… --window-size=W,H`) at desktop and ~500px widths.
 
 ## How it works (the three "stations" in `index.html`)
@@ -43,12 +48,17 @@ There are no tests and no linter. To check the script for syntax errors, pull th
    - `extractPageImages()` follows the transform matrix through the operator list to find where each image sits, renders the page once, and crops those regions. Images smaller than 60px are skipped.
    - `buildPageProducts()` finds product anchors using `CATEGORY_TOKENS` (e.g. `MESA`, `SILLA`, `BUFFET`) and assigns the spec label/value pairs below each one (`SPEC_LABELS`: `MEDIDAS`, `CUBIERTA`, `BASE`…) to the nearest column. Each product is paired with the nearest image on the page.
    - `guessSeccion()` maps a category to Comedor / Sala / Escritorio / Otra through `SECCION_MAP`.
-   - Every catalog entry gets a 64-bit **dHash** (`computeDHashFromCanvasSource`).
+   - Every catalog entry gets a 64-bit **dHash** (`computeDHashFromCanvasSource`), a 200px `thumb` for the AI, and an `idx` (its position in `State.catalog`, used as the candidate number). `unnamed` marks entries the parser couldn't name.
+   - `State.pages[pageNum]` keeps a ~1400px JPEG of each page with images, for `ai-details`.
    - This is a heuristic tuned to one furniture catalog's layout. To support a new catalog, the usual changes are to `CATEGORY_TOKENS`, `SPEC_LABELS` and `SECCION_MAP`.
 2. **Fotos**: photos come from file upload or from Google Drive links. A link can point to a folder or to a single file.
    - `driveListImages()` calls `/api/drive-list`. Each image then loads through `/api/drive-image`, so it's same-origin and the page can read its pixels. Four images load at a time (`runPool`).
    - When `/api` isn't available (local `python -m http.server`, or no key configured), single-file links fall back to `driveDirectUrl()`. Drive blocks pixel reads (CORS) on that path, so there's no auto-match. Folder links need `/api`.
-   - Each photo is hashed and ranked against the catalog by Hamming distance (`bestMatches`, top 6). The similarity % is `1 - dist/64`. A review card shows the top match, the alternatives, a search by name, and editable fields. If Drive blocks pixel reads (CORS), the hash is `null` and the user picks the match by hand.
+   - **Matching:** `addReviewCard()` asks the AI first (`aiMatch`). Catalogs over 80 images are split into chunks of 80; each chunk's top 3 go to a final round. At most 2 photos are analyzed at once (`aiLimit`).
+   - Once the model is chosen, `aiDetails()` fills the fields. The result is cached on the entry, and it also renames `unnamed` entries.
+   - `aiState` becomes `"off"` when `/api` isn't there or the key is missing. After that the card uses `hashRanking()`, which ranks by dHash Hamming distance with a similarity of `1 - dist/64`. That's much weaker: it can match a chair to a table.
+   - Fields the user has typed in (`dataset.auto = "0"`) are never overwritten by automatic fills.
+   - "¿No es este?" lists the whole catalog, ordered AI picks → hash ranking → the rest, with a filter by name or page.
 3. **Tabla**: confirmed products are saved and shown in an editable table, then exported with `toCsv()`.
 
 ## Storage modes

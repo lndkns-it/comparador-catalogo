@@ -2,13 +2,14 @@
 
 Herramienta web para identificar productos de un catálogo en PDF a partir de fotos. Pensada para catálogos de muebles (o cualquier catálogo con fotos de producto), resuelve un flujo típico de tiendas en línea: tienes un PDF con cientos de productos y un lote de fotos sueltas, y necesitas saber a qué modelo corresponde cada foto para poder cargarla a una tienda (WooCommerce, Shopify, etc.) con nombre, colores y medidas.
 
-Todo corre en el navegador — no hay backend ni servidor propio.
+El PDF se lee en el navegador. La identificación de fotos con IA y la lectura de carpetas de Drive usan funciones serverless de Vercel (carpeta `api/`).
 
 ## Qué hace
 
 1. **Lee el catálogo en PDF** directamente en el navegador (usando [PDF.js](https://mozilla.github.io/pdf.js/)): extrae cada imagen de producto y el texto cercano (nombre, categoría, medidas, colores, materiales) analizando la posición de cada elemento en la página.
-2. **Compara fotos contra el catálogo** con un hash perceptual (dHash) calculado en un `<canvas>`, sin subir ninguna imagen a un servidor. Sugiere el producto más parecido y muestra el porcentaje de similitud.
-3. **Deja confirmar o corregir** cada sugerencia a mano — el emparejamiento automático es un punto de partida, no una verdad absoluta.
+2. **Identifica cada foto con IA** ([Claude](https://www.anthropic.com/claude)): compara la foto con las imágenes del catálogo, descarta productos de otro tipo (una silla nunca es una mesa) y sugiere el modelo con un porcentaje de seguridad. Después lee en la página del catálogo el nombre, los colores y las medidas de ese modelo y llena el formulario, aunque el nombre esté impreso dentro de una imagen.
+   Si la IA no está configurada, usa un hash perceptual (dHash) como respaldo, que es mucho menos preciso.
+3. **Deja confirmar o corregir** cada sugerencia a mano: "¿No es este?" muestra todos los productos del catálogo, con los más probables primero.
 4. **Arma una tabla editable** con sección (comedor/sala/escritorio/otra), modelo, colores disponibles, medidas y descripción, exportable a CSV.
 
 ## Cómo correrlo
@@ -22,6 +23,15 @@ python3 -m http.server 8000
 
 (No sirve abrir `index.html` directamente con `file://` — el worker de PDF.js necesita un origen `http(s)`.)
 
+## Identificación con IA
+
+Las funciones `api/ai-match.js` y `api/ai-details.js` usan la API de Claude (modelo `claude-opus-5-5`). Configuración:
+
+1. Crea una clave en [console.anthropic.com](https://console.anthropic.com/) (Settings → API Keys).
+2. En Vercel: Project → Settings → Environment Variables → agrega `ANTHROPIC_API_KEY` con esa clave y vuelve a desplegar.
+
+Costo aproximado: unos pocos centavos de dólar por foto. Depende del tamaño del catálogo: con más de 80 imágenes, cada foto se compara por bloques.
+
 ## Fotos desde una carpeta de Google Drive
 
 Puedes pegar el enlace de una carpeta de Drive (compartida como "Cualquier persona con el enlace") y se cargan todas sus fotos, incluidas las de subcarpetas. Esto usa las funciones de Vercel en `api/`, que necesitan una variable de entorno:
@@ -34,7 +44,7 @@ Para probarlo localmente usa `vercel dev` en lugar de `python -m http.server`.
 ## Stack
 
 - HTML/CSS/JavaScript sin dependencias de build — un único archivo (`index.html`) más el bundle de [PDF.js](https://github.com/mozilla/pdf.js) (`pdf.min.js` / `pdf.worker.min.js`), ya incluido en el repo.
-- Sin framework, sin paso de compilación: se despliega tal cual en cualquier hosting estático (GitHub Pages, Vercel, Netlify...).
+- Sin framework, sin paso de compilación. Las funciones de `api/` corren en Vercel; `package.json` solo declara su dependencia (`@anthropic-ai/sdk`). En un hosting estático sin funciones, la página sigue funcionando, pero sin IA ni carpetas de Drive.
 
 ## Notas sobre el emparejamiento automático
 
