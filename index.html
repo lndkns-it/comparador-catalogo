@@ -358,12 +358,12 @@ table.products img{width:40px;height:40px;object-fit:cover;border-radius:6px;bor
       </label>
 
       <details class="drive-box">
-        <summary>¿Tus fotos están en Google Drive? <span class="muted">— pega los enlaces</span></summary>
+        <summary>¿Tus fotos están en Google Drive? <span class="muted">— pega el enlace de la carpeta</span></summary>
         <div class="drive-body">
-          <p>Un enlace por línea. Cada archivo debe estar compartido como <b>“Cualquier persona con el enlace”</b>.</p>
-          <textarea class="linkbox" id="drive-links" aria-label="Enlaces de Google Drive" placeholder="https://drive.google.com/file/d/XXXXXXXX/view&#10;https://drive.google.com/file/d/YYYYYYYY/view"></textarea>
+          <p>Pega el enlace de una <b>carpeta</b> y se cargarán todas sus fotos (también las de sus subcarpetas). También puedes pegar enlaces de fotos sueltas, uno por línea. La carpeta debe estar compartida como <b>“Cualquier persona con el enlace”</b>.</p>
+          <textarea class="linkbox" id="drive-links" aria-label="Enlaces de Google Drive" placeholder="https://drive.google.com/drive/folders/XXXXXXXX"></textarea>
           <div class="actions-row" style="justify-content:flex-start;margin-top:8px">
-            <button class="btn" id="drive-add-btn">Agregar enlaces</button>
+            <button class="btn" id="drive-add-btn">Cargar fotos de Drive</button>
           </div>
         </div>
       </details>
@@ -876,10 +876,53 @@ setupDropzone(els.pdfDropzone, els.pdfInput, files=>{
 /* ============================================================
    STATION 2 — photos & matching
    ============================================================ */
+function driveId(link){
+  const m = link.match(/\/folders\/([a-zA-Z0-9_-]{10,})/)
+         || link.match(/\/d\/([a-zA-Z0-9_-]{10,})/)
+         || link.match(/[?&]id=([a-zA-Z0-9_-]{10,})/);
+  return m ? m[1] : null;
+}
+function isDriveFolderLink(link){ return /\/folders\//.test(link); }
 function driveDirectUrl(shareUrl){
-  const m = shareUrl.match(/\/d\/([a-zA-Z0-9_-]{10,})/) || shareUrl.match(/[?&]id=([a-zA-Z0-9_-]{10,})/);
-  if (!m) return null;
-  return `https://drive.google.com/uc?export=view&id=${m[1]}`;
+  const id = driveId(shareUrl);
+  return id ? `https://drive.google.com/uc?export=view&id=${id}` : null;
+}
+
+/* Drive folders are listed by the Vercel functions in /api (they hold the
+   Google API key). Images are proxied through /api/drive-image so they come
+   from our own origin and their pixels can be hashed. */
+class DriveApiError extends Error{
+  constructor(code){ super(code); this.code = code; }
+}
+async function driveListImages(link){
+  let r;
+  try{ r = await fetch(`api/drive-list?link=${encodeURIComponent(link)}`); }
+  catch(e){ throw new DriveApiError("no_api"); }
+  const isJson = (r.headers.get("content-type") || "").includes("application/json");
+  if (!isJson) throw new DriveApiError("no_api"); // static host without functions
+  const data = await r.json();
+  if (!r.ok) throw new DriveApiError(data.error || "drive_error");
+  return data;
+}
+async function addPhotoFromDriveApi(file){
+  const img = await loadImageFromSrc(`api/drive-image?id=${encodeURIComponent(file.id)}`, false);
+  const c = canvasFromImage(img, 900);
+  const blob = await new Promise(res => c.toBlob(res, "image/jpeg", 0.9));
+  return {
+    name: file.name, previewUrl: c.toDataURL("image/jpeg",0.85), blob,
+    hash: computeDHashFromCanvasSource(img), fromDrive:true,
+  };
+}
+// runs fn over items with a few requests in flight at once
+async function runPool(items, limit, fn){
+  let next = 0;
+  const workers = Array.from({length: Math.min(limit, items.length)}, async ()=>{
+    while (next < items.length){
+      const i = next++;
+      await fn(items[i], i);
+    }
+  });
+  await Promise.all(workers);
 }
 
 async function addPhotoFromFile(file){
@@ -1157,19 +1200,62 @@ els.driveAddBtn.addEventListener("click", async ()=>{
     return;
   }
   const links = els.driveLinks.value.split("\n").map(s=>s.trim()).filter(Boolean);
-  if (!links.length) return;
+  if (!links.length){ toast("Pega primero el enlace de una carpeta o foto de Drive."); return; }
+  if (links.some(l => !driveId(l))){ toast("Hay un enlace que no parece de Google Drive. Revísalo."); return; }
+
+  els.driveAddBtn.disabled = true;
   els.matchProgressRow.hidden = false;
-  for (const link of links){
-    els.matchProgressText.textContent = `Cargando ${link}…`;
-    const photo = await addPhotoFromDrive(link);
-    if (!photo){
-      toast("No se pudo cargar un enlace de Drive (revisa que sea público).");
-      continue;
+  const failedLinks = [];
+  let loaded = 0, failedImages = 0, usedFallback = false;
+  try{
+    for (const link of links){
+      els.matchProgressText.textContent = isDriveFolderLink(link) ? "Buscando fotos en la carpeta de Drive…" : "Cargando foto de Drive…";
+      let listing;
+      try{
+        listing = await driveListImages(link);
+      }catch(e){
+        if ((e.code === "no_api" || e.code === "missing_key") && !isDriveFolderLink(link)){
+          // no usable /api (local server, or key not configured): old direct-link path, no auto-match
+          const photo = await addPhotoFromDrive(link);
+          if (photo){ addReviewCard(photo); loaded++; usedFallback = true; }
+          else failedLinks.push(link);
+          continue;
+        }
+        failedLinks.push(link);
+        if (e.code === "no_api") toast("Las carpetas de Drive solo funcionan en la versión publicada (Vercel).");
+        else if (e.code === "missing_key") toast("Falta configurar la clave de Google (GOOGLE_API_KEY) en Vercel.");
+        else if (e.code === "not_found") toast("No se pudo abrir un enlace de Drive: revisa que esté compartido como “Cualquier persona con el enlace”.");
+        else toast("Google Drive no respondió. Intenta de nuevo en un momento.");
+        continue;
+      }
+      const images = listing.images || [];
+      if (!images.length){
+        toast(listing.folder ? `La carpeta “${listing.folder}” no tiene fotos.` : "Ese enlace no es una foto.");
+        continue;
+      }
+      const total = images.length;
+      let done = 0;
+      await runPool(images, 4, async (file)=>{
+        try{
+          addReviewCard(await addPhotoFromDriveApi(file));
+          loaded++;
+        }catch(e){ console.error(e); failedImages++; }
+        done++;
+        els.matchProgressText.textContent = `Cargando fotos de Drive: ${done} de ${total}…`;
+      });
+      if (listing.truncated) toast(`La carpeta tiene muchas fotos; se cargaron las primeras ${total}.`);
     }
-    addReviewCard(photo);
+  }finally{
+    els.matchProgressRow.hidden = true;
+    els.driveAddBtn.disabled = false;
   }
-  els.matchProgressRow.hidden = true;
-  els.driveLinks.value = "";
+  els.driveLinks.value = failedLinks.join("\n");
+  if (loaded){
+    let msg = loaded === 1 ? "1 foto cargada de Drive." : `${loaded} fotos cargadas de Drive.`;
+    if (failedImages) msg += ` ${failedImages} no se pudieron abrir.`;
+    if (usedFallback) msg += " Sin comparación automática: elige el modelo a mano.";
+    toast(msg);
+  }
 });
 
 /* ============================================================
@@ -1185,7 +1271,10 @@ const STANDALONE = (typeof window.claude === "undefined");
 const LocalStore = {
   key: "catalogo_productos_v1",
   read(){ try{ return JSON.parse(localStorage.getItem(this.key) || "[]"); }catch(e){ return []; } },
-  write(arr){ try{ localStorage.setItem(this.key, JSON.stringify(arr)); }catch(e){} },
+  write(arr){
+    try{ localStorage.setItem(this.key, JSON.stringify(arr)); }
+    catch(e){ toast("El navegador se quedó sin espacio: descarga el CSV y borra algunas filas."); }
+  },
   listeners: [],
   notify(){ const arr = this.read(); this.listeners.forEach(fn=>fn(arr)); },
   subscribe(fn){ this.listeners.push(fn); fn(this.read()); },
@@ -1226,13 +1315,21 @@ function subscribeProducts(){
   }, err=>{ console.error(err); });
 }
 
+async function shrinkDataUrl(dataUrl, maxDim){
+  try{
+    const img = await loadImageFromSrc(dataUrl, false);
+    return canvasFromImage(img, maxDim).toDataURL("image/jpeg", 0.8);
+  }catch(e){ return dataUrl; }
+}
+
 async function saveProduct(p){
   const base = {
     seccion: p.seccion, modelo: p.modelo, colores: p.colores,
     medidas: p.medidas, descripcion: p.descripcion, pagina: p.pagina,
   };
   if (STANDALONE){
-    LocalStore.add({...base, photoUrl: p.photoPreview, createdAt: new Date().toISOString()});
+    const thumb = await shrinkDataUrl(p.photoPreview, 200);
+    LocalStore.add({...base, photoUrl: thumb, createdAt: new Date().toISOString()});
     return;
   }
   if (!db){ toast("La tabla compartida no está disponible ahora mismo."); return; }

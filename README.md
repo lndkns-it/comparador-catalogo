@@ -22,6 +22,15 @@ python3 -m http.server 8000
 
 (No sirve abrir `index.html` directamente con `file://` — el worker de PDF.js necesita un origen `http(s)`.)
 
+## Fotos desde una carpeta de Google Drive
+
+Puedes pegar el enlace de una carpeta de Drive (compartida como "Cualquier persona con el enlace") y se cargan todas sus fotos, incluidas las de subcarpetas. Esto usa las funciones de Vercel en `api/`, que necesitan una variable de entorno:
+
+1. En [Google Cloud Console](https://console.cloud.google.com/) crea un proyecto, habilita la **Google Drive API** y crea una **clave de API** (Credenciales → Crear credenciales → Clave de API). Conviene restringirla a la Google Drive API.
+2. En Vercel: Project → Settings → Environment Variables → agrega `GOOGLE_API_KEY` con esa clave y vuelve a desplegar.
+
+Para probarlo localmente usa `vercel dev` en lugar de `python -m http.server`.
+
 ## Stack
 
 - HTML/CSS/JavaScript sin dependencias de build — un único archivo (`index.html`) más el bundle de [PDF.js](https://github.com/mozilla/pdf.js) (`pdf.min.js` / `pdf.worker.min.js`), ya incluido en el repo.
