@@ -1,4 +1,12 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Comparador de Catálogo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 /*
   Layout concept: a vertical workbench — three stacked stations (Catálogo →
@@ -59,15 +67,40 @@
 }
 
 *{box-sizing:border-box}
-body{background:var(--bg);color:var(--fg)}
+[hidden]{display:none !important}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--fg);margin:0;line-height:1.45}
 body,input,textarea,select,button{font-family:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,sans-serif}
 .mono,input[data-mono],.tabular{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
 
 .wrap{max-width:920px;margin:0 auto;padding-inline:16px;padding-block:28px 60px}
 
-header.top{margin-bottom:28px}
-header.top h1{font-size:1.5rem;margin:0 0 6px;letter-spacing:-0.01em}
-header.top p{margin:0;color:var(--muted);font-size:.92rem;max-width:60ch;line-height:1.5}
+header.top{margin-bottom:24px}
+header.top h1{font-size:1.65rem;margin:0 0 8px;letter-spacing:-0.01em}
+header.top p{margin:0;color:var(--muted);font-size:.95rem;max-width:62ch;line-height:1.55}
+
+/* "Cómo funciona" guide — three steps a first-time visitor can scan in seconds */
+.howto{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:10px;
+  margin-top:18px;padding:0;list-style:none;
+}
+@media (max-width:640px){ .howto{grid-template-columns:1fr} }
+.howto li{
+  background:var(--surface-2);border-radius:10px;padding:12px 14px;
+  font-size:.84rem;line-height:1.4;display:flex;gap:10px;align-items:flex-start;
+}
+.howto b{display:block;font-size:.88rem;margin-bottom:2px}
+.howto span.muted{color:var(--muted)}
+.howto .n{
+  width:22px;height:22px;border-radius:50%;flex:none;
+  background:var(--accent);color:var(--accent-fg);
+  display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;
+}
+.privacy{
+  display:flex;gap:8px;align-items:center;margin-top:12px;
+  font-size:.8rem;color:var(--muted);
+}
+.privacy svg{flex:none;color:var(--good)}
 
 .stations{display:flex;flex-direction:column;gap:20px}
 
@@ -75,32 +108,55 @@ header.top p{margin:0;color:var(--muted);font-size:.92rem;max-width:60ch;line-he
   background:var(--surface);
   border:1px solid var(--border);
   border-radius:14px;
-  padding:20px;
+  padding:22px;
+  transition:opacity .2s;
 }
-.station-head{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.station-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:16px}
 .station-num{
-  width:26px;height:26px;border-radius:50%;
+  width:30px;height:30px;border-radius:50%;
   background:var(--accent);color:var(--accent-fg);
   display:flex;align-items:center;justify-content:center;
-  font-size:.8rem;font-weight:600;flex:none;
+  font-size:.85rem;font-weight:700;flex:none;
 }
-.station-head h2{font-size:1.05rem;margin:0}
-.station-head .sub{color:var(--muted);font-size:.82rem;margin-top:2px}
-.station-head-text{min-width:0}
+.station.done .station-num{background:var(--good);color:var(--surface);font-size:0}
+.station.done .station-num::before{content:"✓";font-size:.95rem}
+.station.locked{opacity:.55}
+.station.locked .station-num{background:var(--surface-2);color:var(--muted)}
+.station-head h2{font-size:1.1rem;margin:3px 0 0;line-height:1.3}
+.station-head .sub{color:var(--muted);font-size:.84rem;margin-top:3px;line-height:1.45}
+.station-head-text{min-width:0;flex:1}
+.station-status{margin-left:auto;flex:none;margin-top:4px}
+.lock-hint{
+  background:var(--warn-bg);color:var(--warn);border-radius:8px;
+  padding:9px 12px;font-size:.82rem;margin-bottom:12px;
+}
 
 .dropzone{
+  display:flex;flex-direction:column;align-items:center;gap:6px;
   border:1.5px dashed var(--border);
-  border-radius:10px;
-  padding:22px 16px;
+  border-radius:12px;
+  padding:28px 16px;
   text-align:center;
   color:var(--muted);
-  font-size:.88rem;
+  font-size:.86rem;
   cursor:pointer;
+  background:var(--bg);
   transition:border-color .15s, background .15s;
 }
 .dropzone:hover, .dropzone.drag{border-color:var(--accent);background:var(--surface-2)}
-.dropzone strong{color:var(--fg)}
+.dropzone strong{color:var(--fg);font-size:.95rem}
+.dropzone .dz-icon{color:var(--accent);margin-bottom:2px}
+.dropzone .dz-hint{font-size:.76rem}
 .dropzone input{display:none}
+
+.drive-box{margin-top:14px;border:1px solid var(--border);border-radius:10px}
+.drive-box summary{
+  padding:11px 14px;font-size:.86rem;cursor:pointer;font-weight:500;
+  list-style-position:inside;
+}
+.drive-box summary .muted{color:var(--muted);font-weight:400}
+.drive-box .drive-body{padding:0 14px 14px}
+.drive-box .drive-body p{margin:0 0 8px;font-size:.8rem;color:var(--muted);line-height:1.5}
 
 .progress-row{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:.82rem;color:var(--muted)}
 .progress-bar{flex:1;height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden}
@@ -145,14 +201,15 @@ textarea.linkbox{
 .review-list{display:flex;flex-direction:column;gap:14px;margin-top:14px}
 .review-card{
   border:1px solid var(--border);border-radius:12px;padding:14px;
-  display:grid;grid-template-columns:80px 1fr;gap:14px;
+  display:grid;grid-template-columns:120px 1fr;gap:16px;background:var(--bg);
 }
-@media (max-width:520px){ .review-card{grid-template-columns:1fr} }
-.review-card .photo img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;border:1px solid var(--border)}
-.review-card .match-row{display:flex;gap:10px;align-items:flex-start;margin-bottom:10px}
-.review-card .match-row img{width:56px;height:56px;object-fit:contain;background:var(--surface-2);border-radius:6px;border:1px solid var(--border);flex:none}
+@media (max-width:520px){ .review-card{grid-template-columns:1fr} .review-card .photo{max-width:160px} }
+.review-card .photo img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;border:1px solid var(--border);display:block}
+.cap{font-size:.68rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px}
+.review-card .match-row{display:flex;gap:12px;align-items:flex-start;margin-bottom:10px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px}
+.review-card .match-row img{width:64px;height:64px;object-fit:contain;background:var(--surface-2);border-radius:6px;border:1px solid var(--border);flex:none}
 .review-card .match-info{min-width:0;font-size:.82rem}
-.review-card .match-info .name{font-weight:600}
+.review-card .match-info .name{font-weight:600;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .review-card .match-info .meta{color:var(--muted);font-size:.76rem;margin-top:2px}
 
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
@@ -177,7 +234,15 @@ select.inp{appearance:auto}
 .actions-row{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
 
 .table-toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
-.table-toolbar select,.table-toolbar input{max-width:180px}
+.table-toolbar select,.table-toolbar input{max-width:200px;padding:8px 10px}
+@media (max-width:520px){
+  .table-toolbar select,.table-toolbar input{max-width:none;flex:1 1 100%}
+  .table-toolbar .spacer{display:none}
+  .table-toolbar .btn{flex:1 1 100%}
+}
+.review-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:18px}
+.review-head h3{margin:0;font-size:.92rem}
+table.products td .inp{min-width:110px}
 
 table.products{width:100%;border-collapse:collapse;font-size:.82rem}
 table.products th{
@@ -215,11 +280,24 @@ table.products img{width:40px;height:40px;object-fit:cover;border-radius:6px;bor
 
 .rowbtns{display:flex;gap:4px}
 </style>
+</head>
+<body>
 
 <div class="wrap">
   <header class="top">
     <h1>Comparador de Catálogo</h1>
-    <p>Sube el catálogo en PDF de tus productos, luego las fotos que quieras identificar. La herramienta sugiere a qué modelo corresponde cada foto — tú confirmas o corriges — y arma una tabla con colores, medidas y descripción, lista para exportar o compartir.</p>
+    <p>Identifica a qué producto del catálogo corresponde cada una de tus fotos. La herramienta sugiere el modelo más parecido, tú lo confirmas o lo corriges, y al final descargas una tabla (CSV) con modelo, colores, medidas y descripción.</p>
+
+    <ol class="howto" aria-label="Cómo funciona">
+      <li><span class="n">1</span><div><b>Carga el catálogo</b><span class="muted">Sube el PDF. Se leen sus productos, fotos y medidas.</span></div></li>
+      <li><span class="n">2</span><div><b>Sube tus fotos</b><span class="muted">Revisa la sugerencia de cada foto y guárdala.</span></div></li>
+      <li><span class="n">3</span><div><b>Descarga la tabla</b><span class="muted">Edita lo que haga falta y exporta a CSV.</span></div></li>
+    </ol>
+
+    <div class="privacy">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+      El PDF y las fotos se procesan en tu navegador; no se envían a ningún servidor.
+    </div>
   </header>
 
   <div class="stations">
@@ -229,14 +307,16 @@ table.products img{width:40px;height:40px;object-fit:cover;border-radius:6px;bor
       <div class="station-head">
         <div class="station-num">1</div>
         <div class="station-head-text">
-          <h2>Catálogo en PDF</h2>
-          <div class="sub">Se procesa aquí mismo, en tu navegador — el archivo no se envía a ningún servidor.</div>
+          <h2>Carga el catálogo en PDF</h2>
+          <div class="sub">Es el documento de referencia: de aquí salen los nombres, medidas e imágenes de cada modelo.</div>
         </div>
       </div>
 
       <label class="dropzone" id="pdf-dropzone">
         <input type="file" id="pdf-input" accept="application/pdf" />
-        <span id="pdf-dz-text"><strong>Arrastra el PDF del catálogo aquí</strong><br>o haz clic para elegir el archivo</span>
+        <svg class="dz-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+        <span id="pdf-dz-text"><strong>Arrastra aquí el PDF del catálogo</strong></span>
+        <span class="dz-hint">o haz clic para elegir el archivo</span>
       </label>
 
       <div class="progress-row" id="pdf-progress-row" hidden>
@@ -255,37 +335,48 @@ table.products img{width:40px;height:40px;object-fit:cover;border-radius:6px;bor
         <div class="catalog-grid" id="catalog-grid" hidden></div>
       </div>
 
-      <p class="note" id="pdf-note">El emparejamiento de nombre + imagen + medidas por página es automático pero aproximado — revisa la sección 2 antes de guardar cada producto.</p>
+      <p class="note" id="pdf-note">La lectura del PDF es automática pero aproximada: en el paso 2 podrás revisar y corregir cada producto antes de guardarlo.</p>
     </section>
 
     <!-- STATION 2: PHOTOS -->
-    <section class="station" id="station-photos">
+    <section class="station locked" id="station-photos">
       <div class="station-head">
         <div class="station-num">2</div>
         <div class="station-head-text">
-          <h2>Fotos a identificar</h2>
-          <div class="sub">Sube un lote de fotos, o pega enlaces de Google Drive (uno por línea, cada archivo compartido como "cualquiera con el enlace").</div>
+          <h2>Sube las fotos a identificar</h2>
+          <div class="sub">Cada foto se compara con el catálogo. Revisa la sugerencia, ajusta los datos y pulsa <b>Guardar en la tabla</b>.</div>
         </div>
       </div>
+
+      <div class="lock-hint" id="photos-lock-hint">Primero carga el catálogo en el paso 1.</div>
 
       <label class="dropzone" id="photo-dropzone">
         <input type="file" id="photo-input" accept="image/*" multiple />
-        <span><strong>Arrastra tus fotos aquí</strong><br>o haz clic para elegir varias a la vez</span>
+        <svg class="dz-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+        <span><strong>Arrastra aquí tus fotos</strong></span>
+        <span class="dz-hint">o haz clic para elegir varias a la vez (JPG, PNG…)</span>
       </label>
 
-      <div style="margin-top:12px">
-        <span class="field-label">Enlaces de Google Drive (opcional)</span>
-        <textarea class="linkbox" id="drive-links" placeholder="https://drive.google.com/file/d/XXXXXXXX/view&#10;https://drive.google.com/file/d/YYYYYYYY/view"></textarea>
-        <div class="actions-row" style="justify-content:flex-start;margin-top:8px">
-          <button class="btn" id="drive-add-btn">Agregar enlaces</button>
+      <details class="drive-box">
+        <summary>¿Tus fotos están en Google Drive? <span class="muted">— pega los enlaces</span></summary>
+        <div class="drive-body">
+          <p>Un enlace por línea. Cada archivo debe estar compartido como <b>“Cualquier persona con el enlace”</b>.</p>
+          <textarea class="linkbox" id="drive-links" aria-label="Enlaces de Google Drive" placeholder="https://drive.google.com/file/d/XXXXXXXX/view&#10;https://drive.google.com/file/d/YYYYYYYY/view"></textarea>
+          <div class="actions-row" style="justify-content:flex-start;margin-top:8px">
+            <button class="btn" id="drive-add-btn">Agregar enlaces</button>
+          </div>
         </div>
-      </div>
+      </details>
 
       <div class="progress-row" id="match-progress-row" hidden>
         <div class="spinner"></div>
         <span id="match-progress-text">Comparando fotos…</span>
       </div>
 
+      <div class="review-head" id="review-head" hidden>
+        <h3>Fotos por revisar</h3>
+        <span class="pill warn" id="review-count">0 pendientes</span>
+      </div>
       <div class="review-list" id="review-list"></div>
     </section>
 
@@ -294,27 +385,28 @@ table.products img{width:40px;height:40px;object-fit:cover;border-radius:6px;bor
       <div class="station-head">
         <div class="station-num">3</div>
         <div class="station-head-text">
-          <h2>Tabla de productos</h2>
-          <div class="sub">Se guarda aquí mismo — cualquiera con el enlace de esta página puede verla; con permiso de edición, también editarla.</div>
+          <h2>Revisa y descarga la tabla</h2>
+          <div class="sub">Aquí se juntan los productos confirmados. Puedes editar cualquier celda y descargar todo en CSV (se abre en Excel o Google Sheets).</div>
         </div>
+        <span class="pill neutral station-status" id="table-count">0 productos</span>
       </div>
 
       <div class="table-toolbar">
-        <select class="inp" id="filter-seccion">
+        <select class="inp" id="filter-seccion" aria-label="Filtrar por sección">
           <option value="">Todas las secciones</option>
           <option>Comedor</option>
           <option>Sala</option>
           <option>Escritorio</option>
           <option>Otra</option>
         </select>
-        <input class="inp" id="filter-text" placeholder="Buscar por modelo…" />
-        <span style="flex:1"></span>
+        <input class="inp" id="filter-text" placeholder="Buscar por modelo…" aria-label="Buscar por modelo" />
+        <span class="spacer" style="flex:1"></span>
         <button class="btn primary" id="export-csv-btn">Descargar CSV</button>
       </div>
 
       <div id="table-empty" class="empty-state">
         <strong>Todavía no hay productos guardados</strong>
-        Confirma una foto en la sección 2 para que aparezca aquí, con su modelo, colores y medidas.
+        Cuando guardes una foto en el paso 2 aparecerá aquí, con su modelo, colores y medidas.
       </div>
 
       <div class="table-scroll" id="table-scroll" hidden>
@@ -365,6 +457,9 @@ function stripAccents(s){
   return s.normalize("NFD").replace(/\p{Mn}/gu,"");
 }
 function norm(s){ return stripAccents((s||"").trim().toUpperCase()); }
+function escapeHtml(s){
+  return String(s==null?"":s).replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+}
 
 function guessSeccion(categoria){
   const c = norm(categoria);
@@ -493,7 +588,25 @@ const els = {
   tableEmpty: document.getElementById("table-empty"),
   tableScroll: document.getElementById("table-scroll"),
   tableBody: document.getElementById("table-body"),
+  stationCatalog: document.getElementById("station-catalog"),
+  stationPhotos: document.getElementById("station-photos"),
+  photosLockHint: document.getElementById("photos-lock-hint"),
+  reviewHead: document.getElementById("review-head"),
+  reviewCount: document.getElementById("review-count"),
+  tableCount: document.getElementById("table-count"),
 };
+
+/* step states: 1 turns into a check once the catalog is loaded, 2 unlocks */
+function setCatalogReady(ready){
+  els.stationCatalog.classList.toggle("done", ready);
+  els.stationPhotos.classList.toggle("locked", !ready);
+  els.photosLockHint.hidden = ready;
+}
+function updateReviewCount(){
+  const n = State.pendingReviews.length;
+  els.reviewHead.hidden = n === 0;
+  els.reviewCount.textContent = n === 1 ? "1 pendiente" : `${n} pendientes`;
+}
 
 function setupDropzone(zoneEl, inputEl, onFiles){
   zoneEl.addEventListener("dragover", e=>{ e.preventDefault(); zoneEl.classList.add("drag"); });
@@ -723,6 +836,7 @@ function renderCatalogSummary(){
   els.catalogCountPill.textContent = `${named.length} productos detectados`;
   els.catalogImgPill.textContent = `${State.catalog.filter(c=>c.imgDataUrl).length} imágenes`;
   els.catalogSummaryWrap.hidden = false;
+  setCatalogReady(State.catalog.length > 0);
   els.catalogGrid.innerHTML = "";
   for (const c of State.catalog){
     const fig = document.createElement("figure");
@@ -745,6 +859,7 @@ els.catalogReload.addEventListener("click", ()=>{
   els.pdfDropzone.hidden = false;
   els.catalogSummaryWrap.hidden = true;
   State.catalog = [];
+  setCatalogReady(false);
 });
 
 setupDropzone(els.pdfDropzone, els.pdfInput, files=>{
@@ -805,6 +920,7 @@ function addReviewCard(photo){
   };
   State.pendingReviews.push(review);
   renderReviewCard(review);
+  updateReviewCount();
 }
 
 function renderReviewCard(review){
@@ -816,6 +932,10 @@ function renderReviewCard(review){
   photoCol.className = "photo";
   const pimg = document.createElement("img");
   pimg.src = review.photo.previewUrl;
+  pimg.alt = "Tu foto";
+  const pcap = document.createElement("div");
+  pcap.className = "cap"; pcap.textContent = "Tu foto";
+  photoCol.appendChild(pcap);
   photoCol.appendChild(pimg);
 
   const info = document.createElement("div");
@@ -833,11 +953,11 @@ function renderReviewCard(review){
     let confBadge = "";
     if (confPct != null){
       const level = confPct >= 75 ? "good" : confPct >= 45 ? "warn" : "bad";
-      confBadge = `<span class="pill ${level}" style="margin-left:6px">${confPct}% similar</span>`;
+      confBadge = `<span class="pill ${level}">${confPct}% parecido</span>`;
     }
     minfo.innerHTML = entry
-      ? `<div class="name">${entry.name}${confBadge}</div><div class="meta">Pág. ${entry.page} · ${entry.seccion}${entry.specs.MEDIDAS? " · "+entry.specs.MEDIDAS:""}</div>`
-      : `<div class="name">Sin coincidencia — elige manualmente abajo</div>`;
+      ? `<div class="cap">Sugerencia del catálogo</div><div class="name">${escapeHtml(entry.name)}${confBadge}</div><div class="meta">Pág. ${entry.page} · ${escapeHtml(entry.seccion)}${entry.specs.MEDIDAS? " · "+escapeHtml(entry.specs.MEDIDAS):""}</div>`
+      : `<div class="cap">Sugerencia del catálogo</div><div class="name">Sin coincidencia — elige el modelo abajo</div>`;
   }
   paintChosen(review.chosen, top ? similarityPct(top.dist,64) : null);
   matchRow.appendChild(mimg); matchRow.appendChild(minfo);
@@ -855,7 +975,7 @@ function renderReviewCard(review){
   details.className = "pick-alt";
   details.open = noHash || !top;
   const summary = document.createElement("summary");
-  summary.textContent = "Elegir otro modelo del catálogo";
+  summary.textContent = "¿No es este? Elegir otro modelo del catálogo";
   details.appendChild(summary);
 
   const altGrid = document.createElement("div");
@@ -865,7 +985,8 @@ function renderReviewCard(review){
     const b = document.createElement("button");
     b.type = "button";
     if (review.chosen === entry) b.classList.add("chosen");
-    b.innerHTML = `<img src="${entry.imgDataUrl||""}"><div class="n">${entry.name}</div>`;
+    b.innerHTML = `<img src="${entry.imgDataUrl||""}" alt=""><div class="n">${escapeHtml(entry.name)}</div>`;
+    b.title = entry.name;
     b.addEventListener("click", ()=>{
       review.chosen = entry;
       paintChosen(entry, null);
@@ -885,7 +1006,8 @@ function renderReviewCard(review){
       const b = document.createElement("button");
       b.type = "button";
       if (review.chosen === entry) b.classList.add("chosen");
-      b.innerHTML = `<img src="${entry.imgDataUrl||""}"><div class="n">${entry.name}</div>`;
+      b.innerHTML = `<img src="${entry.imgDataUrl||""}" alt=""><div class="n">${escapeHtml(entry.name)}</div>`;
+      b.title = entry.name;
       b.addEventListener("click", ()=>{
         review.chosen = entry;
         paintChosen(entry, null);
@@ -952,6 +1074,7 @@ function renderReviewCard(review){
   discardBtn.addEventListener("click", ()=>{
     State.pendingReviews = State.pendingReviews.filter(r=>r.id!==review.id);
     card.remove();
+    updateReviewCount();
   });
   const saveBtn = document.createElement("button");
   saveBtn.className = "btn primary"; saveBtn.textContent = "Guardar en la tabla";
@@ -970,7 +1093,8 @@ function renderReviewCard(review){
       });
       State.pendingReviews = State.pendingReviews.filter(r=>r.id!==review.id);
       card.remove();
-      toast("Producto guardado.");
+      updateReviewCount();
+      toast("Producto guardado en la tabla (paso 3).");
     }catch(e){
       console.error(e);
       toast("No se pudo guardar. Intenta de nuevo.");
@@ -1013,7 +1137,7 @@ function describeSpecs(specs){
 
 setupDropzone(els.photoDropzone, els.photoInput, async files=>{
   if (!State.catalog.length){
-    toast("Primero sube el catálogo en la sección 1.");
+    toast("Primero carga el catálogo en el paso 1.");
     return;
   }
   els.matchProgressRow.hidden = false;
@@ -1029,7 +1153,7 @@ setupDropzone(els.photoDropzone, els.photoInput, async files=>{
 
 els.driveAddBtn.addEventListener("click", async ()=>{
   if (!State.catalog.length){
-    toast("Primero sube el catálogo en la sección 1.");
+    toast("Primero carga el catálogo en el paso 1.");
     return;
   }
   const links = els.driveLinks.value.split("\n").map(s=>s.trim()).filter(Boolean);
@@ -1144,6 +1268,9 @@ function renderTable(){
     return true;
   });
   els.tableBody.innerHTML = "";
+  const total = State.products.length;
+  els.tableCount.textContent = total === 1 ? "1 producto" : `${total} productos`;
+  els.tableCount.className = "pill station-status " + (total ? "good" : "neutral");
   if (!State.products.length){
     els.tableEmpty.hidden = false; els.tableScroll.hidden = true;
     return;
@@ -1152,9 +1279,9 @@ function renderTable(){
   for (const p of rows){
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${p.photoUrl ? `<img src="${p.photoUrl}">` : ""}</td>
+      <td>${p.photoUrl ? `<img src="${escapeHtml(p.photoUrl)}" alt="">` : ""}</td>
       <td></td><td></td><td></td><td></td><td></td>
-      <td class="tabular">${p.pagina||""}</td>
+      <td class="tabular">${escapeHtml(p.pagina)}</td>
       <td></td>
     `;
     const cells = tr.querySelectorAll("td");
@@ -1234,3 +1361,5 @@ els.exportBtn.addEventListener("click", async ()=>{
 initCapabilities();
 })();
 </script>
+</body>
+</html>
